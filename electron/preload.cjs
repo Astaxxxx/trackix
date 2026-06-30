@@ -1,0 +1,28 @@
+/*
+ * Preload — the ONLY bridge between the sandboxed renderer and the OS.
+ * Everything is an explicit, typed, allow-listed function. The renderer can
+ * never reach `require`, `fs`, or arbitrary IPC channels.
+ */
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('astax', {
+  isDesktop: true,
+  platform: process.platform,
+
+  // storage
+  loadDB: () => ipcRenderer.invoke('db:load'),
+  saveDB: (data) => ipcRenderer.invoke('db:save', data),
+
+  // project scanning (always scoped to a folder the user picks)
+  pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
+  scanProjects: (root) => ipcRenderer.invoke('scan:projects', root),
+  rescanOne: (dir) => ipcRenderer.invoke('scan:one', dir),
+
+  // shell
+  openPath: (p) => ipcRenderer.invoke('shell:openPath', p),
+  openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
+
+  // local AI (Ollama) — runs on the user's own machine, nothing leaves it
+  aiStatus: () => ipcRenderer.invoke('ai:status'),
+  aiRefine: (payload) => ipcRenderer.invoke('ai:refine', payload),
+});

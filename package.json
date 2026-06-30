@@ -1,0 +1,83 @@
+{
+  "name": "trackix",
+  "version": "0.1.0",
+  "description": "Trackix — local-first project tracker for vibe coders & developers. By Astax Labs.",
+  "author": "Astax Labs",
+  "license": "MIT",
+  "private": true,
+  "main": "electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev:web": "vite",
+    "dev": "concurrently -k \"vite\" \"npm:dev:electron\"",
+    "dev:electron": "wait-on tcp:5173 && cross-env ASTAX_DEV=1 electron .",
+    "build:web": "vite build",
+    "make:icon": "node scripts/make-icon.mjs",
+    "build": "npm run make:icon && vite build && electron-builder",
+    "build:win": "npm run make:icon && vite build && electron-builder --win",
+    "build:mac": "npm run make:icon && vite build && electron-builder --mac",
+    "build:linux": "npm run make:icon && vite build && electron-builder --linux",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "framer-motion": "^11.3.19",
+    "lucide-react": "^0.417.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^31.3.1",
+    "electron-builder": "^24.13.3",
+    "sharp": "^0.35.2",
+    "typescript": "^5.5.4",
+    "vite": "^5.3.5",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "labs.astax.trackix",
+    "productName": "Trackix",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Trackix",
+      "artifactName": "Trackix-Setup.${ext}"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.developer-tools",
+      "artifactName": "Trackix.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "build/icon.png",
+      "category": "Development",
+      "artifactName": "Trackix.${ext}"
+    }
+  }
+}

@@ -1,0 +1,58 @@
+name: Release
+
+# Builds Trackix for Windows, macOS and Linux on real runners and attaches the
+# installers to a GitHub Release. Triggers when you push a version tag (v1.2.3),
+# or manually from the Actions tab.
+#
+# This assumes the trackix project is the repository root. If you keep it inside
+# a monorepo, add `working-directory: astax-tracker` under a top-level
+# `defaults.run:` block, and adjust the `files:` paths accordingly.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to create/update the Release
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # electron-builder builds the target for whichever OS it runs on
+      # (Windows → .exe, macOS → .dmg, Linux → .AppImage).
+      - name: Build installer
+        run: npm run build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # No signing certs configured → build unsigned (Gatekeeper/SmartScreen
+          # will warn users; fine for a free download). Add certs later to remove.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Attach installers to the Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
