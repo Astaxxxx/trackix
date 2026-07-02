@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Plus, Search, RefreshCw, Trash2, ShieldCheck, Settings as SettingsIcon, Sparkles } from 'lucide-react';
+import { Plus, Search, RefreshCw, Trash2, ShieldCheck, Settings as SettingsIcon, Sparkles, Megaphone } from 'lucide-react';
 import type { DB, Project, ScanResult, Status, Settings } from './types';
 import { DEFAULT_SETTINGS } from './types';
 import { api } from './api';
@@ -9,6 +9,7 @@ import ProjectCard from './components/ProjectCard';
 import ProjectDetail from './components/ProjectDetail';
 import AddProjectModal from './components/AddProjectModal';
 import SettingsModal from './components/SettingsModal';
+import ShareCard from './components/ShareCard';
 import HeroMascot from './components/HeroMascot';
 import { TrackixMark, BgSpiral } from './components/Marks';
 import { Mascot, AstaxLogo } from './components/Assets';
@@ -50,6 +51,7 @@ export default function App() {
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const colRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const trashRef = useRef<HTMLDivElement | null>(null);
@@ -61,7 +63,7 @@ export default function App() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
-        setOpenId(null); setAdding(false); setSettingsOpen(false);
+        setOpenId(null); setAdding(false); setSettingsOpen(false); setShareOpen(false);
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         searchRef.current?.focus();
@@ -227,6 +229,9 @@ export default function App() {
         <button className="btn" onClick={refreshAll} disabled={refreshingAll || projects.length === 0} title="Re-scan every tracked project">
           <RefreshCw size={15} className={refreshingAll ? 'spin' : ''} /> Refresh all
         </button>
+        <button className="btn" onClick={() => setShareOpen(true)} disabled={projects.length === 0} title="Generate a shareable Ship Card of your board">
+          <Megaphone size={15} /> Share
+        </button>
         <button className="icon-btn" onClick={() => setSettingsOpen(true)} title="Settings" style={settings.aiEnabled ? { borderColor: 'var(--red)', color: 'var(--red)' } : undefined}>
           {settings.aiEnabled ? <Sparkles size={16} /> : <SettingsIcon size={16} />}
         </button>
@@ -375,6 +380,11 @@ export default function App() {
             onClose={() => setSettingsOpen(false)}
           />
         )}
+      </AnimatePresence>
+
+      {/* ship card */}
+      <AnimatePresence>
+        {shareOpen && <ShareCard projects={projects} onClose={() => setShareOpen(false)} />}
       </AnimatePresence>
     </div>
     </>

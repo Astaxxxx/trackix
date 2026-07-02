@@ -516,6 +516,20 @@ input, textarea, select { font-family: inherit; }
 @keyframes seal-in { 0% { transform: scale(0.4) rotate(-90deg); opacity: 0; } 60% { transform: scale(1.08) rotate(6deg); } 100% { transform: scale(1) rotate(0); opacity: 1; } }
 @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
 
+/* ===== ship card ===== */
+.share-modal { width: 720px; }
+.share-canvas {
+  width: 100%; height: auto; display: block; margin-top: 18px;
+  border-radius: 14px; border: 1px solid var(--line);
+  box-shadow: var(--shadow-dream);
+}
+.share-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.share-caption {
+  margin-top: 12px; font-size: 12.5px; color: var(--text-dim); line-height: 1.6;
+  background: var(--paper); border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm); padding: 10px 13px;
+}
+
 /* ===== responsive — narrow windows ===== */
 @media (max-width: 1060px) {
   .statsbar { grid-template-columns: repeat(2, 1fr); }
