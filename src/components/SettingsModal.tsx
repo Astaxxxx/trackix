@@ -1,18 +1,21 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Sparkles, ShieldCheck, Loader2, CheckCircle2, AlertTriangle, ExternalLink } from 'lucide-react';
+import { X, Sparkles, ShieldCheck, Loader2, CheckCircle2, AlertTriangle, ExternalLink, Ghost, Trash2 } from 'lucide-react';
 import type { AiStatus, Settings } from '../types';
-import { api } from '../api';
+import { api, isDesktop } from '../api';
 
 interface Props {
   settings: Settings;
+  projectCount: number;
   onChange: (patch: Partial<Settings>) => void;
+  onClearAll: () => void;
   onClose: () => void;
 }
 
-export default function SettingsModal({ settings, onChange, onClose }: Props) {
+export default function SettingsModal({ settings, projectCount, onChange, onClearAll, onClose }: Props) {
   const [status, setStatus] = useState<AiStatus | null>(null);
   const [testing, setTesting] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   async function test() {
     setTesting(true);
@@ -109,6 +112,49 @@ export default function SettingsModal({ settings, onChange, onClose }: Props) {
             </div>
           </>
         )}
+
+        {/* desktop buddy toggle */}
+        <div className="ai-row" style={{ marginTop: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Ghost size={18} style={{ color: 'var(--red)' }} />
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 14 }}>Desktop buddy</div>
+              <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>
+                {isDesktop ? 'A floating mascot on your desktop — click it to open Trackix' : 'Available in the desktop app'}
+              </div>
+            </div>
+          </div>
+          <button
+            className={`switch ${settings.buddyEnabled ? 'on' : ''}`}
+            onClick={() => isDesktop && onChange({ buddyEnabled: !settings.buddyEnabled })}
+            aria-pressed={settings.buddyEnabled}
+            disabled={!isDesktop}
+            style={!isDesktop ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+          >
+            <span className="knob" />
+          </button>
+        </div>
+
+        {/* danger zone — start fresh */}
+        <div className="section-title" style={{ marginTop: 22 }}>Start fresh</div>
+        <div className="danger-row">
+          <div style={{ fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+            Remove <b>all {projectCount}</b> tracked project{projectCount === 1 ? '' : 's'} and empty every column.
+            This can’t be undone (your files aren’t touched — only Trackix’s list).
+          </div>
+          {!confirmClear ? (
+            <button className="btn danger" onClick={() => setConfirmClear(true)} disabled={projectCount === 0}>
+              <Trash2 size={15} /> Clear all
+            </button>
+          ) : (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn" onClick={() => setConfirmClear(false)}>Cancel</button>
+              <button className="btn danger-solid" onClick={() => { onClearAll(); setConfirmClear(false); onClose(); }}>
+                <Trash2 size={15} /> Yes, clear all
+              </button>
+            </div>
+          )}
+        </div>
       </motion.div>
     </div>
   );

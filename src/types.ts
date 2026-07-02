@@ -32,9 +32,10 @@ export interface Project extends ScanResult {
 export interface Settings {
   aiEnabled: boolean;
   aiModel: string;
+  buddyEnabled: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { aiEnabled: false, aiModel: 'llama3.2' };
+export const DEFAULT_SETTINGS: Settings = { aiEnabled: false, aiModel: 'llama3.2', buddyEnabled: false };
 
 export interface AiStatus {
   running: boolean;

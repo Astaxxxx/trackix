@@ -19,6 +19,8 @@ interface AstaxBridge {
   openExternal(url: string): Promise<boolean>;
   aiStatus(): Promise<AiStatus>;
   aiRefine(payload: AiPayload): Promise<{ status: Status; reason: string } | null>;
+  setBuddy(enabled: boolean): Promise<boolean>;
+  onBuddyDismissed(cb: () => void): () => void;
 }
 
 /** What we hand the local model to classify a project. */
@@ -128,5 +130,15 @@ export const api = {
     };
     if (isDesktop) return window.astax!.aiRefine(payload);
     return null;
+  },
+
+  /* ---- desktop buddy ---- */
+  async setBuddy(enabled: boolean): Promise<boolean> {
+    if (isDesktop) return window.astax!.setBuddy(enabled);
+    return false; // only available in the desktop app
+  },
+  onBuddyDismissed(cb: () => void): () => void {
+    if (isDesktop) return window.astax!.onBuddyDismissed(cb);
+    return () => {};
   },
 };

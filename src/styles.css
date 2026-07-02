@@ -189,6 +189,14 @@ input, textarea, select { font-family: inherit; }
   transition: all .15s;
 }
 .icon-btn:hover { color: var(--red); border-color: var(--red); transform: rotate(90deg); }
+.icon-btn { position: relative; }
+.icon-btn.ai-on { border-color: var(--red); color: var(--red); }
+.ai-dot {
+  position: absolute; top: -3px; right: -3px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--red); border: 1.5px solid #fff; box-shadow: 0 0 8px var(--red-glow);
+  animation: ai-pulse 1.8s ease-in-out infinite;
+}
+@keyframes ai-pulse { 0%,100%{ transform: scale(1); opacity: 1; } 50%{ transform: scale(1.25); opacity: .7; } }
 
 /* ===== stats ===== */
 .statsbar { display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(8px, 1.2vw, 14px); padding: clamp(10px, 2vh, 20px) clamp(14px, 2.5vw, 28px) 6px; }
@@ -238,6 +246,7 @@ input, textarea, select { font-family: inherit; }
 
 /* ===== card ===== */
 .card {
+  flex: 0 0 auto; /* never let a crowded column squash cards — scroll instead */
   background: rgba(255, 255, 255, 0.78); border: 1px solid rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(14px) saturate(1.15);
   border-radius: 16px; padding: 15px 16px 14px; cursor: grab;
@@ -385,6 +394,17 @@ input, textarea, select { font-family: inherit; }
   background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.25); transition: transform .2s cubic-bezier(.2,.8,.2,1);
 }
 .switch.on .knob { transform: translateX(20px); }
+
+/* danger zone */
+.danger-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  background: var(--red-soft); border: 1px solid rgba(224,48,30,0.2);
+  border-radius: var(--radius-sm); padding: 14px 15px;
+}
+.btn.danger { color: var(--red-deep); border-color: rgba(224,48,30,0.4); white-space: nowrap; }
+.btn.danger:hover { background: var(--red); color: #fff; border-color: var(--red); }
+.btn.danger-solid { background: var(--red); color: #fff; border-color: var(--red); white-space: nowrap; }
+.btn.danger-solid:hover { background: var(--red-deep); color: #fff; }
 
 /* AI badge on the suggestion */
 .ai-chip {

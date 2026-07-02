@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Plus, Search, RefreshCw, Trash2, ShieldCheck, Settings as SettingsIcon, Sparkles, Megaphone } from 'lucide-react';
+import { Plus, Search, RefreshCw, Trash2, ShieldCheck, Settings as SettingsIcon, Megaphone } from 'lucide-react';
 import type { DB, Project, ScanResult, Status, Settings } from './types';
 import { DEFAULT_SETTINGS } from './types';
 import { api } from './api';
@@ -93,6 +93,15 @@ export default function App() {
     api.saveDB(db);
   }, [projects, lastRoot, settings, loaded]);
 
+  /* ---- desktop buddy: mirror the setting to the floating window ---- */
+  useEffect(() => {
+    if (!loaded) return;
+    api.setBuddy(settings.buddyEnabled);
+  }, [settings.buddyEnabled, loaded]);
+
+  /* ---- if the buddy is dismissed from its own × button, reflect it here ---- */
+  useEffect(() => api.onBuddyDismissed(() => setSettings((s) => ({ ...s, buddyEnabled: false }))), []);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return projects;
@@ -116,6 +125,11 @@ export default function App() {
   function remove(id: string) {
     setProjects((prev) => prev.filter((x) => x.id !== id));
     if (openId === id) setOpenId(null);
+  }
+  function clearAll() {
+    setProjects([]);
+    setOpenId(null);
+    setLastRoot(undefined);
   }
 
   function addScanned(results: (ScanResult & { aiTagged?: boolean })[]) {
@@ -232,8 +246,13 @@ export default function App() {
         <button className="btn" onClick={() => setShareOpen(true)} disabled={projects.length === 0} title="Generate a shareable Ship Card of your board">
           <Megaphone size={15} /> Share
         </button>
-        <button className="icon-btn" onClick={() => setSettingsOpen(true)} title="Settings" style={settings.aiEnabled ? { borderColor: 'var(--red)', color: 'var(--red)' } : undefined}>
-          {settings.aiEnabled ? <Sparkles size={16} /> : <SettingsIcon size={16} />}
+        <button
+          className={`icon-btn ${settings.aiEnabled ? 'ai-on' : ''}`}
+          onClick={() => setSettingsOpen(true)}
+          title={settings.aiEnabled ? 'Settings — local AI is ON' : 'Settings'}
+        >
+          <SettingsIcon size={16} />
+          {settings.aiEnabled && <span className="ai-dot" />}
         </button>
         <button className="btn btn-primary" onClick={() => setAdding(true)}>
           <Plus size={16} /> Add projects
@@ -376,7 +395,9 @@ export default function App() {
         {settingsOpen && (
           <SettingsModal
             settings={settings}
+            projectCount={projects.length}
             onChange={(p) => setSettings((s) => ({ ...s, ...p }))}
+            onClearAll={clearAll}
             onClose={() => setSettingsOpen(false)}
           />
         )}

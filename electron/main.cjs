@@ -11,7 +11,7 @@
  *  - No remote content is ever loaded. External links open in the OS
  *    browser, never inside the app window.
  */
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, screen } = require('electron');
 const path = require('node:path');
 const fsp = require('node:fs/promises');
 const { scanProjects, analyseProject } = require('./scanner.cjs');
@@ -19,6 +19,7 @@ const { scanProjects, analyseProject } = require('./scanner.cjs');
 const isDev = process.env.ASTAX_DEV === '1';
 
 let mainWindow = null;
+let buddyWindow = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -57,6 +58,53 @@ function createWindow() {
   }
 }
 
+/* ------------------------- desktop buddy ------------------------- */
+// A small always-on-top mascot that floats on the desktop. Click it to open
+// Trackix, drag it anywhere, or dismiss it. Its own hardened preload; it can
+// only move itself, focus the main window, or hide.
+function mascotFileUrl() {
+  const p = isDev
+    ? path.join(__dirname, '..', 'public', 'mascot.png')
+    : path.join(__dirname, '..', 'dist', 'mascot.png');
+  return 'file://' + p.replace(/\\/g, '/');
+}
+
+function createBuddy() {
+  if (buddyWindow && !buddyWindow.isDestroyed()) { buddyWindow.show(); return; }
+  const { workArea } = screen.getPrimaryDisplay();
+  const W = 168, H = 196;
+  buddyWindow = new BrowserWindow({
+    width: W, height: H,
+    x: workArea.x + workArea.width - W - 24,
+    y: workArea.y + workArea.height - H - 24,
+    frame: false, transparent: true, resizable: false, movable: true,
+    alwaysOnTop: true, skipTaskbar: true, hasShadow: false, fullscreenable: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'buddy-preload.cjs'),
+      contextIsolation: true, nodeIntegration: false, sandbox: true,
+    },
+  });
+  buddyWindow.setAlwaysOnTop(true, 'screen-saver');
+  buddyWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  buddyWindow.loadFile(path.join(__dirname, 'buddy.html'));
+  buddyWindow.on('closed', () => { buddyWindow = null; });
+}
+
+function destroyBuddy() {
+  if (buddyWindow && !buddyWindow.isDestroyed()) buddyWindow.close();
+  buddyWindow = null;
+}
+
+ipcMain.handle('buddy:set', (_e, enabled) => { enabled ? createBuddy() : destroyBuddy(); return true; });
+ipcMain.handle('buddy:mascot', () => mascotFileUrl());
+ipcMain.handle('buddy:getPos', () => (buddyWindow ? buddyWindow.getPosition() : [0, 0]));
+ipcMain.handle('buddy:setPos', (_e, x, y) => { if (buddyWindow) buddyWindow.setPosition(Math.round(x), Math.round(y)); });
+ipcMain.handle('buddy:openMain', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) createWindow();
+  else { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.show(); mainWindow.focus(); }
+});
+ipcMain.handle('buddy:hide', () => { destroyBuddy(); if (mainWindow) mainWindow.webContents.send('buddy:dismissed'); });
+
 app.whenReady().then(() => {
   createWindow();
   app.on('activate', () => {
@@ -67,6 +115,8 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+
+app.on('before-quit', destroyBuddy);
 
 /* ----------------------------- storage ----------------------------- */
 // Single JSON file in the OS-appropriate userData dir. Local only.

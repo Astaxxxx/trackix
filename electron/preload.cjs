@@ -25,4 +25,12 @@ contextBridge.exposeInMainWorld('astax', {
   // local AI (Ollama) — runs on the user's own machine, nothing leaves it
   aiStatus: () => ipcRenderer.invoke('ai:status'),
   aiRefine: (payload) => ipcRenderer.invoke('ai:refine', payload),
+
+  // desktop buddy (floating mascot)
+  setBuddy: (enabled) => ipcRenderer.invoke('buddy:set', enabled),
+  onBuddyDismissed: (cb) => {
+    const h = () => cb();
+    ipcRenderer.on('buddy:dismissed', h);
+    return () => ipcRenderer.removeListener('buddy:dismissed', h);
+  },
 });
