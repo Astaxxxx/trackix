@@ -24,10 +24,3 @@ export const STATUS_LABEL: Record<string, string> = {
   finished: 'Finished',
   dropped: 'Dropped',
 };
-
-/** Japanese sub-labels for the theme. */
-export const STATUS_JP: Record<string, string> = {
-  unfinished: '進行中', // shinkōchū — in progress
-  finished: '完成',     // kansei — complete
-  dropped: '中止',      // chūshi — discontinued
-};

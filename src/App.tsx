@@ -54,6 +54,22 @@ export default function App() {
   const colRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const trashRef = useRef<HTMLDivElement | null>(null);
   const [trashHot, setTrashHot] = useState(false);
+  const [hoverCol, setHoverCol] = useState<Status | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+
+  /* ---- keyboard: Esc closes, Ctrl/Cmd+K focuses search ---- */
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setOpenId(null); setAdding(false); setSettingsOpen(false);
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   /* ---- load once ---- */
   useEffect(() => {
@@ -154,11 +170,14 @@ export default function App() {
 
   function onCardDrag(x: number, y: number) {
     setTrashHot(within(trashRef.current, x, y));
+    const over = COLUMNS.find((c) => within(colRefs.current[c.key], x, y));
+    setHoverCol(over ? over.key : null);
   }
 
   function onCardDragEnd(project: Project, x: number, y: number) {
     setDragging(false);
     setTrashHot(false);
+    setHoverCol(null);
     if (within(trashRef.current, x, y)) {
       remove(project.id);
       return;
@@ -196,7 +215,8 @@ export default function App() {
         <div className="search">
           <Search size={15} color="var(--text-faint)" />
           <input
-            placeholder="Search projects, tools…"
+            ref={searchRef}
+            placeholder="Search projects, tools…  (Ctrl+K)"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -261,14 +281,15 @@ export default function App() {
                     <span className="column-count">{items.length}</span>
                   </div>
                   <div
-                    className="column-body"
+                    className={`column-body ${dragging && hoverCol === col.key ? 'drag-over' : ''}`}
                     ref={(el) => { colRefs.current[col.key] = el; }}
                   >
                     <AnimatePresence mode="popLayout">
-                      {items.map((p) => (
+                      {items.map((p, i) => (
                         <ProjectCard
                           key={p.id}
                           project={p}
+                          index={i}
                           onOpen={() => setOpenId(p.id)}
                           onDragStart={() => setDragging(true)}
                           onDrag={onCardDrag}

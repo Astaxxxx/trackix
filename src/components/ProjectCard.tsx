@@ -6,6 +6,7 @@ import { timeAgo } from '../util';
 
 interface Props {
   project: Project;
+  index?: number; // position in its column — used for the staggered entrance
   onOpen: () => void;
   onDragStart: () => void;
   onDrag: (clientX: number, clientY: number) => void;
@@ -15,7 +16,7 @@ interface Props {
 // forwardRef is required so framer-motion's <AnimatePresence mode="popLayout">
 // can measure the card on exit.
 const ProjectCard = forwardRef<HTMLDivElement, Props>(function ProjectCard(
-  { project, onOpen, onDragStart, onDrag, onDragEnd }, ref
+  { project, index = 0, onOpen, onDragStart, onDrag, onDragEnd }, ref
 ) {
   const tools = project.tools.slice(0, 4);
   const extra = project.tools.length - tools.length;
@@ -34,8 +35,8 @@ const ProjectCard = forwardRef<HTMLDivElement, Props>(function ProjectCard(
       onDrag={(_e, info) => onDrag(info.point.x, info.point.y)}
       onDragEnd={(_e, info) => onDragEnd(info.point.x, info.point.y)}
       onClick={onOpen}
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0, y: 14, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 380, damping: 30, delay: Math.min(index * 0.05, 0.4) } }}
       exit={{ opacity: 0, scale: 0.85, filter: 'blur(4px)' }}
       transition={{ type: 'spring', stiffness: 380, damping: 30 }}
       whileHover={{ y: -4 }}
