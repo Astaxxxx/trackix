@@ -194,9 +194,12 @@ export default function App() {
 
   return (
     <>
-    {/* ambient background art */}
+    {/* ambient background art — dreamy drifting light */}
     <div className="bg-art" aria-hidden>
       <div className="bg-sun" />
+      <div className="orb o1" />
+      <div className="orb o2" />
+      <div className="orb o3" />
       <div className="bg-ninja"><Mascot size={360} /></div>
       <BgSpiral />
     </div>
