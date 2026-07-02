@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FolderOpen, Loader2, X, Sparkles, ShieldCheck, Plus } from 'lucide-react';
-import type { ScanResult, Status } from '../types';
+import type { ScanResult, Status, AiConfig } from '../types';
 import { api } from '../api';
 import { STATUS_LABEL, normPath } from '../util';
 
@@ -9,7 +9,7 @@ export type ScanResultTagged = ScanResult & { aiTagged?: boolean };
 
 interface Props {
   existingPaths: Set<string>;
-  ai: { model: string } | null;
+  ai: AiConfig | null;
   onClose: () => void;
   onAdd: (results: ScanResultTagged[]) => void;
 }
@@ -40,7 +40,7 @@ export default function AddProjectModal({ existingPaths, ai, onClose, onAdd }: P
       if (ai && fresh.length) {
         setAiBusy(true);
         for (const r of fresh) {
-          const out = await api.aiRefine(r, ai.model);
+          const out = await api.aiRefine(r, ai);
           if (out) {
             setResults((prev) => prev.map((x) =>
               x.path === r.path ? { ...x, suggestedStatus: out.status, suggestedReason: out.reason, aiTagged: true } : x));

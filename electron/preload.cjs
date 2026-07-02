@@ -22,8 +22,8 @@ contextBridge.exposeInMainWorld('astax', {
   openPath: (p) => ipcRenderer.invoke('shell:openPath', p),
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
 
-  // local AI (Ollama) — runs on the user's own machine, nothing leaves it
-  aiStatus: () => ipcRenderer.invoke('ai:status'),
+  // AI — Ollama (fully local) or the Claude API with the user's own key
+  aiStatus: (cfg) => ipcRenderer.invoke('ai:status', cfg),
   aiRefine: (payload) => ipcRenderer.invoke('ai:refine', payload),
 
   // desktop buddy (floating mascot)

@@ -28,14 +28,34 @@ export interface Project extends ScanResult {
   aiTagged?: boolean; // suggestion came from the local AI, not the heuristic
 }
 
-/** Optional local-AI (Ollama) settings. Everything stays on-device. */
+/** AI settings. Ollama runs fully on-device; the Claude API sends project
+ *  metadata (name, tools, README excerpt) to Anthropic using YOUR key. */
+export type AiProvider = 'ollama' | 'claude';
+
 export interface Settings {
   aiEnabled: boolean;
-  aiModel: string;
+  aiProvider: AiProvider;
+  aiModel: string;       // Ollama model tag
+  claudeApiKey: string;  // stored locally in the Trackix DB only
+  claudeModel: string;
   buddyEnabled: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { aiEnabled: false, aiModel: 'llama3.2', buddyEnabled: false };
+export const DEFAULT_SETTINGS: Settings = {
+  aiEnabled: false,
+  aiProvider: 'ollama',
+  aiModel: 'llama3.2',
+  claudeApiKey: '',
+  claudeModel: 'claude-opus-4-8',
+  buddyEnabled: true,
+};
+
+/** Everything the AI backend needs to run one classification. */
+export interface AiConfig {
+  provider: AiProvider;
+  model: string;   // ollama tag or claude model id
+  apiKey?: string; // claude only
+}
 
 export interface AiStatus {
   running: boolean;
@@ -44,7 +64,8 @@ export interface AiStatus {
 }
 
 export interface DB {
-  version: 1;
+  /** 1 = original schema · 2 = buddy-on-by-default migration applied */
+  version: number;
   projects: Project[];
   lastRoot?: string;
   settings?: Settings;

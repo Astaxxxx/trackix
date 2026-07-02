@@ -1,4 +1,4 @@
-import type { DB, ScanResult, AiStatus, Status } from './types';
+import type { DB, ScanResult, AiStatus, Status, AiConfig } from './types';
 
 /**
  * Single data-access layer. In Electron it talks to the secure `window.astax`
@@ -17,15 +17,14 @@ interface AstaxBridge {
   rescanOne(dir: string): Promise<ScanResult | null>;
   openPath(p: string): Promise<boolean>;
   openExternal(url: string): Promise<boolean>;
-  aiStatus(): Promise<AiStatus>;
+  aiStatus(cfg: AiConfig): Promise<AiStatus>;
   aiRefine(payload: AiPayload): Promise<{ status: Status; reason: string } | null>;
   setBuddy(enabled: boolean): Promise<boolean>;
   onBuddyDismissed(cb: () => void): () => void;
 }
 
-/** What we hand the local model to classify a project. */
-interface AiPayload {
-  model: string;
+/** What we hand the model to classify a project. */
+interface AiPayload extends AiConfig {
   name: string;
   tools: string[];
   hosting: string;
@@ -113,17 +112,17 @@ export const api = {
   },
 
   /* ---- local AI (Ollama) ---- */
-  async aiStatus(): Promise<AiStatus> {
-    if (isDesktop) return window.astax!.aiStatus();
+  async aiStatus(cfg: AiConfig): Promise<AiStatus> {
+    if (isDesktop) return window.astax!.aiStatus(cfg);
     return { running: false, models: [], error: 'AI runs only in the desktop app.' };
   },
 
-  /** Ask the local model to classify a scanned project. Returns null if AI is
+  /** Ask the configured AI to classify a scanned project. Returns null if AI is
    *  unavailable, so callers transparently keep the heuristic suggestion. */
-  async aiRefine(scan: ScanResult, model: string): Promise<{ status: Status; reason: string } | null> {
+  async aiRefine(scan: ScanResult, cfg: AiConfig): Promise<{ status: Status; reason: string } | null> {
     const daysSinceEdit = scan.lastModified ? Math.round((Date.now() - scan.lastModified) / 86400000) : 9999;
     const payload = {
-      model, name: scan.name, tools: scan.tools, hosting: scan.hosting,
+      ...cfg, name: scan.name, tools: scan.tools, hosting: scan.hosting,
       completion: scan.completion, daysSinceEdit, todos: scan.todos,
       hasReadme: scan.hasReadme, hasTests: scan.hasTests, hasGit: scan.hasGit,
       readmeExcerpt: scan.readmeExcerpt,

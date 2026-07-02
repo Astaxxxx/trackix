@@ -1,8 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Plus, Search, RefreshCw, Trash2, ShieldCheck, Settings as SettingsIcon, Megaphone } from 'lucide-react';
-import type { DB, Project, ScanResult, Status, Settings } from './types';
+import type { DB, Project, ScanResult, Status, Settings, AiConfig } from './types';
 import { DEFAULT_SETTINGS } from './types';
+
+/** Build the AI backend config from settings (null = AI off). */
+function aiConfig(s: Settings): AiConfig | null {
+  if (!s.aiEnabled) return null;
+  return s.aiProvider === 'claude'
+    ? { provider: 'claude', model: s.claudeModel, apiKey: s.claudeApiKey }
+    : { provider: 'ollama', model: s.aiModel };
+}
 import { api } from './api';
 import { uid, normPath } from './util';
 import ProjectCard from './components/ProjectCard';
@@ -80,7 +88,10 @@ export default function App() {
       if (db) {
         setProjects(db.projects || []);
         setLastRoot(db.lastRoot);
-        if (db.settings) setSettings({ ...DEFAULT_SETTINGS, ...db.settings });
+        const merged = { ...DEFAULT_SETTINGS, ...(db.settings || {}) };
+        // v1 → v2 migration: the desktop buddy became on-by-default.
+        if ((db.version ?? 1) < 2) merged.buddyEnabled = true;
+        setSettings(merged);
       }
       setLoaded(true);
     })();
@@ -89,7 +100,7 @@ export default function App() {
   /* ---- persist on change (after first load) ---- */
   useEffect(() => {
     if (!loaded) return;
-    const db: DB = { version: 1, projects, lastRoot, settings };
+    const db: DB = { version: 2, projects, lastRoot, settings };
     api.saveDB(db);
   }, [projects, lastRoot, settings, loaded]);
 
@@ -163,9 +174,10 @@ export default function App() {
       suggestedStatus: fresh.suggestedStatus, suggestedReason: fresh.suggestedReason,
       readmeExcerpt: fresh.readmeExcerpt, aiTagged: false,
     };
-    // If local AI is on, let the model refine the suggestion (falls back silently).
-    if (settings.aiEnabled) {
-      const ai = await api.aiRefine(fresh, settings.aiModel);
+    // If AI is on, let the configured model refine the suggestion (falls back silently).
+    const cfg = aiConfig(settings);
+    if (cfg) {
+      const ai = await api.aiRefine(fresh, cfg);
       if (ai) { update.suggestedStatus = ai.status; update.suggestedReason = ai.reason; update.aiTagged = true; }
     }
     patch(id, update);
@@ -383,7 +395,7 @@ export default function App() {
         {adding && (
           <AddProjectModal
             existingPaths={new Set(projects.map((p) => normPath(p.path)))}
-            ai={settings.aiEnabled ? { model: settings.aiModel } : null}
+            ai={aiConfig(settings)}
             onClose={() => setAdding(false)}
             onAdd={addScanned}
           />

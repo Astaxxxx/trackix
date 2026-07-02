@@ -17,6 +17,9 @@ const fsp = require('node:fs/promises');
 const { scanProjects, analyseProject } = require('./scanner.cjs');
 
 const isDev = process.env.ASTAX_DEV === '1';
+// Started by the OS login item: show only the floating buddy; the main window
+// opens on demand when the buddy is clicked.
+const buddyOnly = process.argv.includes('--buddy-only');
 
 let mainWindow = null;
 let buddyWindow = null;
@@ -95,7 +98,15 @@ function destroyBuddy() {
   buddyWindow = null;
 }
 
-ipcMain.handle('buddy:set', (_e, enabled) => { enabled ? createBuddy() : destroyBuddy(); return true; });
+ipcMain.handle('buddy:set', (_e, enabled) => {
+  enabled ? createBuddy() : destroyBuddy();
+  // Keep the OS login item in sync: when the buddy is on, Trackix starts with
+  // the OS in buddy-only mode (packaged builds only — dev has no login item).
+  if (!isDev) {
+    app.setLoginItemSettings({ openAtLogin: !!enabled, args: ['--buddy-only'] });
+  }
+  return true;
+});
 ipcMain.handle('buddy:mascot', () => mascotFileUrl());
 ipcMain.handle('buddy:getPos', () => (buddyWindow ? buddyWindow.getPosition() : [0, 0]));
 ipcMain.handle('buddy:setPos', (_e, x, y) => { if (buddyWindow) buddyWindow.setPosition(Math.round(x), Math.round(y)); });
@@ -105,8 +116,24 @@ ipcMain.handle('buddy:openMain', () => {
 });
 ipcMain.handle('buddy:hide', () => { destroyBuddy(); if (mainWindow) mainWindow.webContents.send('buddy:dismissed'); });
 
-app.whenReady().then(() => {
-  createWindow();
+/** Read saved settings straight from disk (main process, pre-renderer). */
+async function readSettings() {
+  try {
+    const raw = await fsp.readFile(dbPath(), 'utf8');
+    return JSON.parse(raw).settings || {};
+  } catch { return {}; }
+}
+
+app.whenReady().then(async () => {
+  const settings = await readSettings();
+  if (buddyOnly) {
+    // OS login start: buddy only. The main window opens when the buddy is clicked.
+    createBuddy();
+    if (settings.buddyEnabled === false) { destroyBuddy(); createWindow(); }
+  } else {
+    createWindow();
+    if (settings.buddyEnabled) createBuddy();
+  }
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -163,13 +190,87 @@ ipcMain.handle('shell:openExternal', async (_e, url) => {
   return true;
 });
 
-/* ------------------------- local AI (Ollama) ------------------------- */
-// Optional, opt-in. We talk to Ollama running on the user's own machine
-// (http://localhost:11434). The call is made from the main process so there
-// are no CORS issues, and crucially: no project data ever leaves the device.
+/* ----------------------------- AI backends ----------------------------- */
+// Two opt-in providers, both driven from the main process:
+//  - Ollama: runs on the user's own machine (localhost:11434) — nothing leaves it.
+//  - Claude API: uses the user's OWN key (stored locally); sends only project
+//    metadata (name, tools, README excerpt) to Anthropic. Clearly disclosed in UI.
 const OLLAMA = 'http://127.0.0.1:11434';
 
-ipcMain.handle('ai:status', async () => {
+const AI_SYSTEM = [
+  'You triage local coding projects. Classify the project status as exactly one of:',
+  '- "unfinished": actively being built, has open work / TODOs, no clear release.',
+  '- "finished": shipped or complete (README + deploy/host, clean, low open work).',
+  '- "dropped": abandoned — untouched for a long time AND incomplete.',
+  'Keep "reason" under 14 words.',
+].join('\n');
+
+function aiSignals(p) {
+  return JSON.stringify({
+    name: p.name, tools: p.tools, hosting: p.hosting,
+    heuristicCompletionPercent: p.completion, daysSinceLastEdit: p.daysSinceEdit,
+    todoMarkers: p.todos, hasReadme: p.hasReadme, hasTests: p.hasTests, hasGit: p.hasGit,
+    readme: (p.readmeExcerpt || '').slice(0, 240),
+  });
+}
+
+const VALID_STATUS = ['unfinished', 'finished', 'dropped'];
+
+function coerceResult(parsed) {
+  if (!parsed || !VALID_STATUS.includes(parsed.status)) return null;
+  return { status: parsed.status, reason: String(parsed.reason || '').slice(0, 160) };
+}
+
+/* ---- Claude API (official SDK, called with the user's own key) ---- */
+let AnthropicSDK = null;
+function anthropicClient(apiKey) {
+  if (!AnthropicSDK) AnthropicSDK = require('@anthropic-ai/sdk');
+  return new AnthropicSDK({ apiKey });
+}
+
+async function claudeStatus(cfg) {
+  try {
+    const client = anthropicClient(cfg.apiKey);
+    const m = await client.models.retrieve(cfg.model);
+    return { running: true, models: [m.id] };
+  } catch (e) {
+    const msg = e && e.status === 401 ? 'Invalid API key'
+      : e && e.status === 404 ? `Model "${cfg.model}" not found`
+      : (e && e.message) || 'Claude API not reachable';
+    return { running: false, models: [], error: msg };
+  }
+}
+
+async function claudeRefine(payload) {
+  const client = anthropicClient(payload.apiKey);
+  // Structured output guarantees valid JSON matching our schema.
+  const response = await client.messages.create({
+    model: payload.model,
+    max_tokens: 512, // tiny classification call
+    system: AI_SYSTEM,
+    output_config: {
+      format: {
+        type: 'json_schema',
+        schema: {
+          type: 'object',
+          properties: {
+            status: { type: 'string', enum: VALID_STATUS },
+            reason: { type: 'string' },
+          },
+          required: ['status', 'reason'],
+          additionalProperties: false,
+        },
+      },
+    },
+    messages: [{ role: 'user', content: 'Project signals:\n' + aiSignals(payload) }],
+  });
+  if (response.stop_reason === 'refusal') return null;
+  const text = response.content.find((b) => b.type === 'text');
+  return coerceResult(JSON.parse(text ? text.text : '{}'));
+}
+
+/* ---- Ollama (fully local) ---- */
+async function ollamaStatus() {
   try {
     const r = await fetch(OLLAMA + '/api/tags', { signal: AbortSignal.timeout(2500) });
     if (!r.ok) return { running: false, models: [], error: 'Ollama returned HTTP ' + r.status };
@@ -178,50 +279,47 @@ ipcMain.handle('ai:status', async () => {
   } catch (e) {
     return { running: false, models: [], error: (e && e.message) || 'Ollama not reachable' };
   }
-});
-
-function buildAiPrompt(p) {
-  return [
-    'You triage local coding projects. Classify the project status as exactly one of:',
-    '- "unfinished": actively being built, has open work / TODOs, no clear release.',
-    '- "finished": shipped or complete (README + deploy/host, clean, low open work).',
-    '- "dropped": abandoned — untouched for a long time AND incomplete.',
-    '',
-    'Reply with ONLY JSON: {"status":"unfinished|finished|dropped","reason":"<=14 words"}.',
-    '',
-    'Project signals:',
-    JSON.stringify({
-      name: p.name, tools: p.tools, hosting: p.hosting,
-      heuristicCompletionPercent: p.completion, daysSinceLastEdit: p.daysSinceEdit,
-      todoMarkers: p.todos, hasReadme: p.hasReadme, hasTests: p.hasTests, hasGit: p.hasGit,
-      readme: (p.readmeExcerpt || '').slice(0, 240),
-    }),
-  ].join('\n');
 }
+
+async function ollamaRefine(payload) {
+  const r = await fetch(OLLAMA + '/api/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: payload.model,
+      prompt: AI_SYSTEM
+        + '\n\nReply with ONLY JSON: {"status":"unfinished|finished|dropped","reason":"<=14 words"}.'
+        + '\n\nProject signals:\n' + aiSignals(payload),
+      stream: false,
+      format: 'json',
+      options: { temperature: 0.1 },
+    }),
+    signal: AbortSignal.timeout(45000),
+  });
+  if (!r.ok) return null;
+  const j = await r.json();
+  return coerceResult(JSON.parse((j.response || '').trim()));
+}
+
+/* ---- IPC ---- */
+ipcMain.handle('ai:status', async (_e, cfg) => {
+  if (cfg && cfg.provider === 'claude') {
+    if (!cfg.apiKey) return { running: false, models: [], error: 'Enter your Anthropic API key first' };
+    return claudeStatus(cfg);
+  }
+  return ollamaStatus();
+});
 
 ipcMain.handle('ai:refine', async (_e, payload) => {
   if (!payload || typeof payload.model !== 'string') return null;
   try {
-    const r = await fetch(OLLAMA + '/api/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: payload.model,
-        prompt: buildAiPrompt(payload),
-        stream: false,
-        format: 'json',
-        options: { temperature: 0.1 },
-      }),
-      signal: AbortSignal.timeout(45000),
-    });
-    if (!r.ok) return null;
-    const j = await r.json();
-    const parsed = JSON.parse((j.response || '').trim());
-    const status = ['unfinished', 'finished', 'dropped'].includes(parsed.status) ? parsed.status : null;
-    if (!status) return null;
-    return { status, reason: String(parsed.reason || '').slice(0, 160) };
+    if (payload.provider === 'claude') {
+      if (!payload.apiKey) return null;
+      return await claudeRefine(payload);
+    }
+    return await ollamaRefine(payload);
   } catch {
-    return null;
+    return null; // callers silently keep the heuristic suggestion
   }
 });
 

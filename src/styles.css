@@ -411,6 +411,19 @@ input, textarea, select { font-family: inherit; }
 }
 .switch.on .knob { transform: translateX(20px); }
 
+/* AI provider picker */
+.provider-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.provider {
+  text-align: left; padding: 13px 14px; border-radius: var(--radius-sm);
+  background: var(--paper); border: 1.5px solid var(--line-strong);
+  transition: border-color .18s, background .18s, transform .14s;
+}
+.provider:hover { border-color: var(--red); transform: translateY(-1px); }
+.provider.active { border-color: var(--red); background: var(--red-soft); box-shadow: 0 0 0 3px rgba(224,48,30,0.08); }
+.provider .p-name { font-weight: 800; font-size: 13.5px; }
+.provider.active .p-name { color: var(--red-deep); }
+.provider .p-sub { font-size: 11px; color: var(--text-faint); margin-top: 3px; }
+
 /* danger zone */
 .danger-row {
   display: flex; align-items: center; justify-content: space-between; gap: 14px;
