@@ -77,6 +77,22 @@ input, textarea, select { font-family: inherit; }
 
 /* ===== ambient background art (animated) ===== */
 .bg-art { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+/* slow aurora wash — dreamy rotating light */
+.bg-art::before {
+  content: ''; position: absolute; inset: -25%;
+  background: conic-gradient(from 0deg at 50% 42%,
+    transparent 0deg, rgba(224,48,30,0.06) 40deg, transparent 110deg,
+    rgba(255,172,64,0.05) 200deg, transparent 260deg, rgba(224,48,30,0.05) 320deg, transparent 360deg);
+  filter: blur(48px); animation: aurora 72s linear infinite;
+}
+@keyframes aurora { to { transform: rotate(360deg); } }
+/* soft light from above + gentle floor vignette */
+.bg-art::after {
+  content: ''; position: absolute; inset: 0;
+  background:
+    radial-gradient(140% 80% at 50% -12%, rgba(255,255,255,0.5), transparent 46%),
+    radial-gradient(150% 120% at 50% 118%, rgba(22,17,15,0.06), transparent 55%);
+}
 .bg-ninja {
   position: absolute; bottom: -4%; right: 2%;
   opacity: 0.06; filter: grayscale(1);
@@ -104,9 +120,9 @@ input, textarea, select { font-family: inherit; }
   background: radial-gradient(circle, rgba(224, 48, 30, 0.14), transparent 62%);
   animation: drift3 44s ease-in-out infinite alternate;
 }
-@keyframes drift1 { to { transform: translate(9vmin, 6vmin) scale(1.18); } }
-@keyframes drift2 { to { transform: translate(-8vmin, -7vmin) scale(1.12); } }
-@keyframes drift3 { to { transform: translate(-10vmin, 5vmin) scale(0.9); } }
+@keyframes drift1 { from { opacity: 0.7; } to { transform: translate(9vmin, 6vmin) scale(1.18); opacity: 1; } }
+@keyframes drift2 { from { opacity: 0.6; } to { transform: translate(-8vmin, -7vmin) scale(1.12); opacity: 0.95; } }
+@keyframes drift3 { from { opacity: 0.55; } to { transform: translate(-10vmin, 5vmin) scale(0.9); opacity: 0.85; } }
 .bg-sun {
   position: absolute; top: 12%; left: 50%; width: 520px; height: 520px;
   transform: translateX(-50%);
