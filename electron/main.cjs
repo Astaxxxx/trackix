@@ -98,13 +98,18 @@ function destroyBuddy() {
   buddyWindow = null;
 }
 
+// Show / hide the floating buddy while the app is running. Does NOT touch the
+// OS login item — "launch on startup" is a separate, explicit choice below.
 ipcMain.handle('buddy:set', (_e, enabled) => {
   enabled ? createBuddy() : destroyBuddy();
-  // Keep the OS login item in sync: when the buddy is on, Trackix starts with
-  // the OS in buddy-only mode (packaged builds only — dev has no login item).
-  if (!isDev) {
-    app.setLoginItemSettings({ openAtLogin: !!enabled, args: ['--buddy-only'] });
-  }
+  return true;
+});
+
+// Register / clear the OS login item so the avatar appears when the laptop boots
+// (packaged builds only — dev has no login item). `--buddy-only` starts it as
+// just the floating avatar; clicking it opens the full app.
+ipcMain.handle('buddy:setStartup', (_e, enabled) => {
+  if (!isDev) app.setLoginItemSettings({ openAtLogin: !!enabled, args: ['--buddy-only'] });
   return true;
 });
 ipcMain.handle('buddy:mascot', () => mascotFileUrl());
@@ -126,12 +131,12 @@ async function readSettings() {
 
 app.whenReady().then(async () => {
   const settings = await readSettings();
-  if (buddyOnly && settings.buddyEnabled === true) {
-    // OS login start, and the user has the buddy enabled: buddy only.
-    // The main window opens when the buddy is clicked.
+  if (buddyOnly && settings.buddyStartup === true) {
+    // Laptop boot with "launch on startup" enabled: show only the floating
+    // avatar. The main window opens when the buddy is clicked.
     createBuddy();
   } else {
-    // Normal launch — or a stale login item while the buddy is disabled:
+    // Normal launch — or a stale login item while startup is now off:
     // clean the login item up and open the app the ordinary way.
     if (buddyOnly && !isDev) app.setLoginItemSettings({ openAtLogin: false, args: ['--buddy-only'] });
     createWindow();

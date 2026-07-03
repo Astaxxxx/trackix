@@ -108,8 +108,15 @@ export default function App() {
     api.setBuddy(settings.buddyEnabled);
   }, [settings.buddyEnabled, loaded]);
 
+  /* ---- launch-on-startup: register/clear the OS login item ---- */
+  useEffect(() => {
+    if (!loaded) return;
+    // Startup only makes sense while the buddy is enabled.
+    api.setBuddyStartup(settings.buddyEnabled && settings.buddyStartup);
+  }, [settings.buddyEnabled, settings.buddyStartup, loaded]);
+
   /* ---- if the buddy is dismissed from its own × button, reflect it here ---- */
-  useEffect(() => api.onBuddyDismissed(() => setSettings((s) => ({ ...s, buddyEnabled: false }))), []);
+  useEffect(() => api.onBuddyDismissed(() => setSettings((s) => ({ ...s, buddyEnabled: false, buddyStartup: false }))), []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

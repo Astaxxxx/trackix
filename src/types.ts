@@ -39,6 +39,7 @@ export interface Settings {
   claudeApiKey: string;  // stored locally in the Trackix DB only
   claudeModel: string;
   buddyEnabled: boolean;
+  buddyStartup: boolean; // launch the floating avatar when the laptop boots
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -48,6 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
   claudeApiKey: '',
   claudeModel: 'claude-opus-4-8',
   buddyEnabled: false, // opt-in: never floats or auto-starts until the user turns it on
+  buddyStartup: false, // opt-in: never floats or auto-starts until the user turns it on
 };
 
 /** Everything the AI backend needs to run one classification. */

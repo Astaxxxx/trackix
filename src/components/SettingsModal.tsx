@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Sparkles, ShieldCheck, Loader2, CheckCircle2, AlertTriangle, ExternalLink, Ghost, Trash2 } from 'lucide-react';
+import { X, Sparkles, ShieldCheck, Loader2, CheckCircle2, AlertTriangle, ExternalLink, Ghost, Trash2, Power } from 'lucide-react';
 import type { AiStatus, Settings } from '../types';
 import { api, isDesktop } from '../api';
 
@@ -208,6 +208,28 @@ export default function SettingsModal({ settings, projectCount, onChange, onClea
             <span className="knob" />
           </button>
         </div>
+
+        {/* launch-on-startup sub-toggle (only meaningful when the buddy is on) */}
+        {isDesktop && settings.buddyEnabled && (
+          <div className="ai-row buddy-sub">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Power size={16} style={{ color: 'var(--red)' }} />
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 13.5 }}>Launch on laptop startup</div>
+                <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>
+                  The avatar appears when you turn on your laptop — click it to open Trackix
+                </div>
+              </div>
+            </div>
+            <button
+              className={`switch ${settings.buddyStartup ? 'on' : ''}`}
+              onClick={() => onChange({ buddyStartup: !settings.buddyStartup })}
+              aria-pressed={settings.buddyStartup}
+            >
+              <span className="knob" />
+            </button>
+          </div>
+        )}
 
         {/* danger zone — start fresh */}
         <div className="section-title" style={{ marginTop: 22 }}>Start fresh</div>

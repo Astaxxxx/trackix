@@ -400,6 +400,11 @@ input, textarea, select { font-family: inherit; }
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 14px 15px;
 }
+/* indented sub-option (e.g. "launch on startup" under the buddy toggle) */
+.ai-row.buddy-sub {
+  margin: 8px 0 0 22px; padding: 11px 14px; background: transparent;
+  border-style: dashed; border-color: var(--line-strong);
+}
 .switch {
   width: 46px; height: 26px; border-radius: 99px; background: var(--line-strong);
   position: relative; transition: background .2s; flex-shrink: 0;

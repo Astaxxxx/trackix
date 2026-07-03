@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('astax', {
 
   // desktop buddy (floating mascot)
   setBuddy: (enabled) => ipcRenderer.invoke('buddy:set', enabled),
+  setBuddyStartup: (enabled) => ipcRenderer.invoke('buddy:setStartup', enabled),
   onBuddyDismissed: (cb) => {
     const h = () => cb();
     ipcRenderer.on('buddy:dismissed', h);

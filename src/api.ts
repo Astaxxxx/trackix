@@ -20,6 +20,7 @@ interface AstaxBridge {
   aiStatus(cfg: AiConfig): Promise<AiStatus>;
   aiRefine(payload: AiPayload): Promise<{ status: Status; reason: string } | null>;
   setBuddy(enabled: boolean): Promise<boolean>;
+  setBuddyStartup(enabled: boolean): Promise<boolean>;
   onBuddyDismissed(cb: () => void): () => void;
 }
 
@@ -135,6 +136,10 @@ export const api = {
   async setBuddy(enabled: boolean): Promise<boolean> {
     if (isDesktop) return window.astax!.setBuddy(enabled);
     return false; // only available in the desktop app
+  },
+  async setBuddyStartup(enabled: boolean): Promise<boolean> {
+    if (isDesktop) return window.astax!.setBuddyStartup(enabled);
+    return false;
   },
   onBuddyDismissed(cb: () => void): () => void {
     if (isDesktop) return window.astax!.onBuddyDismissed(cb);
