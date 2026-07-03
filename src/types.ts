@@ -47,7 +47,7 @@ export const DEFAULT_SETTINGS: Settings = {
   aiModel: 'llama3.2',
   claudeApiKey: '',
   claudeModel: 'claude-opus-4-8',
-  buddyEnabled: true,
+  buddyEnabled: false, // opt-in: never floats or auto-starts until the user turns it on
 };
 
 /** Everything the AI backend needs to run one classification. */
@@ -64,7 +64,7 @@ export interface AiStatus {
 }
 
 export interface DB {
-  /** 1 = original schema · 2 = buddy-on-by-default migration applied */
+  /** 1 = original schema · 2 = added AI provider + buddy settings */
   version: number;
   projects: Project[];
   lastRoot?: string;

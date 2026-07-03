@@ -88,10 +88,8 @@ export default function App() {
       if (db) {
         setProjects(db.projects || []);
         setLastRoot(db.lastRoot);
-        const merged = { ...DEFAULT_SETTINGS, ...(db.settings || {}) };
-        // v1 → v2 migration: the desktop buddy became on-by-default.
-        if ((db.version ?? 1) < 2) merged.buddyEnabled = true;
-        setSettings(merged);
+        // Buddy is strictly opt-in — no migration ever flips it on.
+        setSettings({ ...DEFAULT_SETTINGS, ...(db.settings || {}) });
       }
       setLoaded(true);
     })();

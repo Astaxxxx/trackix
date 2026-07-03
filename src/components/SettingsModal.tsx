@@ -49,7 +49,7 @@ export default function SettingsModal({ settings, projectCount, onChange, onClea
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <div className="modal-title">Settings</div>
-            <div className="modal-sub">Smarter status detection with a local AI — optional and 100% on your device.</div>
+            <div className="modal-sub">Smarter status detection — run it fully local for free, or plug in the Claude API for the sharpest calls.</div>
           </div>
           <button className="icon-btn" onClick={onClose}><X size={16} /></button>
         </div>
@@ -59,8 +59,8 @@ export default function SettingsModal({ settings, projectCount, onChange, onClea
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Sparkles size={18} style={{ color: 'var(--red)' }} />
             <div>
-              <div style={{ fontWeight: 800, fontSize: 14 }}>Local AI analysis</div>
-              <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>Use a local model to judge finished / unfinished / dropped</div>
+              <div style={{ fontWeight: 800, fontSize: 14 }}>AI analysis</div>
+              <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>Let a model judge finished / unfinished / dropped</div>
             </div>
           </div>
           <button

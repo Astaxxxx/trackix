@@ -126,13 +126,16 @@ async function readSettings() {
 
 app.whenReady().then(async () => {
   const settings = await readSettings();
-  if (buddyOnly) {
-    // OS login start: buddy only. The main window opens when the buddy is clicked.
+  if (buddyOnly && settings.buddyEnabled === true) {
+    // OS login start, and the user has the buddy enabled: buddy only.
+    // The main window opens when the buddy is clicked.
     createBuddy();
-    if (settings.buddyEnabled === false) { destroyBuddy(); createWindow(); }
   } else {
+    // Normal launch — or a stale login item while the buddy is disabled:
+    // clean the login item up and open the app the ordinary way.
+    if (buddyOnly && !isDev) app.setLoginItemSettings({ openAtLogin: false, args: ['--buddy-only'] });
     createWindow();
-    if (settings.buddyEnabled) createBuddy();
+    if (settings.buddyEnabled === true) createBuddy();
   }
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
