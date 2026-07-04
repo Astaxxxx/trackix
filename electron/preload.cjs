@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('astax', {
   // AI — Ollama (fully local) or the Claude API with the user's own key
   aiStatus: (cfg) => ipcRenderer.invoke('ai:status', cfg),
   aiRefine: (payload) => ipcRenderer.invoke('ai:refine', payload),
+  aiRevive: (payload) => ipcRenderer.invoke('ai:revive', payload),
 
   // desktop buddy (floating mascot)
   setBuddy: (enabled) => ipcRenderer.invoke('buddy:set', enabled),

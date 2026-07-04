@@ -395,6 +395,99 @@ input, textarea, select { font-family: inherit; }
   font-family: 'SFMono-Regular', Consolas, monospace; color: var(--ink);
 }
 
+/* ===== Revival Ritual + The Oracle ===== */
+.btn-oracle { position: relative; overflow: hidden; }
+.btn-oracle::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(60px 20px at 50% 120%, rgba(224,48,30,0.18), transparent 70%);
+  animation: oracle-glow 3s ease-in-out infinite;
+}
+@keyframes oracle-glow { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+.ritual-card, .oracle-card { overflow: hidden; }
+
+.ritual-stage {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 34px 10px 30px; text-align: center;
+}
+.ritual-circle { position: relative; width: 190px; height: 190px; display: grid; place-items: center; margin-bottom: 22px; }
+.glyph-ring {
+  position: absolute; border-radius: 50%; border: 2px dashed rgba(224, 48, 30, 0.55);
+}
+.glyph-ring.g1 { width: 180px; height: 180px; animation: spin 9s linear infinite; }
+.glyph-ring.g2 {
+  width: 132px; height: 132px; border-style: dotted; border-color: rgba(224, 48, 30, 0.35);
+  animation: spin 6s linear infinite reverse;
+}
+.ritual-core {
+  width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center; color: #fff;
+  background: radial-gradient(circle at 36% 30%, var(--red-bright), var(--red) 55%, var(--red-deep));
+  box-shadow: 0 0 42px var(--red-glow), inset 0 0 0 3px rgba(255,255,255,0.35);
+  animation: core-pulse 1.6s ease-in-out infinite;
+}
+@keyframes core-pulse { 0%,100% { transform: scale(1); box-shadow: 0 0 30px var(--red-glow); } 50% { transform: scale(1.09); box-shadow: 0 0 60px var(--red-glow); } }
+.ritual-ember {
+  position: absolute; bottom: 8px; left: var(--x); width: 6px; height: 6px; border-radius: 50%;
+  background: radial-gradient(circle, var(--red-bright), var(--red) 60%, transparent 72%);
+  opacity: 0; animation: ritual-rise var(--d) linear var(--delay) infinite;
+}
+@keyframes ritual-rise {
+  0% { transform: translateY(0) scale(0.5); opacity: 0; }
+  20% { opacity: 0.95; }
+  100% { transform: translateY(-150px) translateX(10px) scale(1.05); opacity: 0; }
+}
+.ritual-title { font-size: 20px; font-weight: 900; letter-spacing: -0.01em; }
+.ritual-title span { color: var(--red); }
+.ritual-sub { font-size: 13px; color: var(--text-dim); margin-top: 7px; }
+
+.stall-reason {
+  background: var(--paper); border: 1px solid var(--line); border-left: 3px solid var(--st-dropped);
+  border-radius: var(--radius-sm); padding: 12px 14px; font-size: 13.5px; color: var(--ink-soft); line-height: 1.55;
+}
+.revival-steps { list-style: none; display: flex; flex-direction: column; gap: 9px; }
+.revival-steps li {
+  display: flex; align-items: flex-start; gap: 10px; font-size: 13.5px; line-height: 1.5; color: var(--ink-soft);
+  background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px;
+}
+.step-num {
+  flex-shrink: 0; width: 21px; height: 21px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 11px; font-weight: 900; color: #fff;
+  background: linear-gradient(135deg, var(--red), var(--red-deep));
+}
+
+/* revival path inside the detail drawer */
+.revival-check { display: flex; align-items: flex-start; gap: 9px; padding: 8px 10px; border-radius: 9px; cursor: pointer; transition: background .15s; }
+.revival-check:hover { background: var(--paper); }
+.revival-check input { margin-top: 2px; accent-color: var(--red); width: 15px; height: 15px; flex-shrink: 0; }
+.revival-check span { font-size: 13px; line-height: 1.5; color: var(--ink-soft); }
+.revival-check.done span { text-decoration: line-through; color: var(--text-faint); }
+
+/* oracle */
+.oracle-eye { animation: core-pulse 1.6s ease-in-out infinite, oracle-blink 4.5s ease-in-out infinite; }
+@keyframes oracle-blink { 0%, 46%, 54%, 100% { border-radius: 50%; } 50% { border-radius: 50% / 12%; } }
+.oracle-label {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 800;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--red-deep);
+}
+.chosen-name {
+  font-size: 34px; font-weight: 900; letter-spacing: -0.02em; margin-top: 14px;
+  background: linear-gradient(120deg, var(--ink) 30%, var(--red) 50%, var(--ink) 70%);
+  background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: sheen 3.2s linear infinite;
+}
+.prophecy {
+  font-size: 15.5px; font-style: italic; color: var(--ink-soft); line-height: 1.6; margin-top: 10px;
+  border-left: 3px solid var(--red); padding-left: 13px;
+}
+.omens { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 18px; }
+.omen {
+  background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 12px 8px; text-align: center;
+}
+.omen-value { font-size: 18px; font-weight: 900; color: var(--red-deep); }
+.omen-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-faint); margin-top: 3px; }
+.oracle-reason { font-size: 12.5px; color: var(--text-dim); margin-top: 14px; line-height: 1.55; }
+
 /* ===== settings toggle ===== */
 .ai-row {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;

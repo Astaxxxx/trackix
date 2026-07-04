@@ -309,6 +309,83 @@ async function ollamaRefine(payload) {
   return coerceResult(JSON.parse((j.response || '').trim()));
 }
 
+/* ---- Revival Ritual (AI plan) ---- */
+const REVIVE_SYSTEM = [
+  'You are helping a developer resurrect a stalled/abandoned coding project.',
+  'Given the project signals, produce:',
+  '- stallReason: one sentence — the most likely reason it died (be specific, not generic).',
+  '- summary: one energising sentence about the realistic path back.',
+  '- steps: 4 to 6 concrete, small, ordered actions that get it from its current state to SHIPPED.',
+  '  Each step must be doable in one sitting. First step should rebuild context; last step should be shipping.',
+].join('\n');
+
+const REVIVE_SCHEMA = {
+  type: 'object',
+  properties: {
+    stallReason: { type: 'string' },
+    summary: { type: 'string' },
+    steps: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['stallReason', 'summary', 'steps'],
+  additionalProperties: false,
+};
+
+function coerceRevival(parsed) {
+  if (!parsed || !Array.isArray(parsed.steps) || parsed.steps.length === 0) return null;
+  return {
+    stallReason: String(parsed.stallReason || '').slice(0, 300),
+    summary: String(parsed.summary || '').slice(0, 300),
+    steps: parsed.steps.slice(0, 6).map((s) => String(s).slice(0, 200)),
+  };
+}
+
+async function claudeRevive(payload) {
+  const client = anthropicClient(payload.apiKey);
+  const response = await client.messages.create({
+    model: payload.model,
+    max_tokens: 1024,
+    system: REVIVE_SYSTEM,
+    output_config: { format: { type: 'json_schema', schema: REVIVE_SCHEMA } },
+    messages: [{ role: 'user', content: 'Project signals:\n' + aiSignals(payload) }],
+  });
+  if (response.stop_reason === 'refusal') return null;
+  const text = response.content.find((b) => b.type === 'text');
+  return coerceRevival(JSON.parse(text ? text.text : '{}'));
+}
+
+async function ollamaRevive(payload) {
+  const r = await fetch(OLLAMA + '/api/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: payload.model,
+      prompt: REVIVE_SYSTEM
+        + '\n\nReply with ONLY JSON: {"stallReason":"...","summary":"...","steps":["...","..."]}.'
+        + '\n\nProject signals:\n' + aiSignals(payload),
+      stream: false,
+      format: 'json',
+      options: { temperature: 0.2 },
+    }),
+    signal: AbortSignal.timeout(60000),
+  });
+  if (!r.ok) return null;
+  const j = await r.json();
+  return coerceRevival(JSON.parse((j.response || '').trim()));
+}
+
+ipcMain.handle('ai:revive', async (_e, payload) => {
+  if (!payload || typeof payload.model !== 'string') return null;
+  try {
+    if (payload.provider === 'claude') {
+      if (!payload.apiKey) return null;
+      return await claudeRevive(payload);
+    }
+    return await ollamaRevive(payload);
+  } catch {
+    return null; // caller falls back to the heuristic plan
+  }
+});
+
 /* ---- IPC ---- */
 ipcMain.handle('ai:status', async (_e, cfg) => {
   if (cfg && cfg.provider === 'claude') {

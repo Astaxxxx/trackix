@@ -19,6 +19,7 @@ interface AstaxBridge {
   openExternal(url: string): Promise<boolean>;
   aiStatus(cfg: AiConfig): Promise<AiStatus>;
   aiRefine(payload: AiPayload): Promise<{ status: Status; reason: string } | null>;
+  aiRevive(payload: AiPayload): Promise<{ stallReason: string; summary: string; steps: string[] } | null>;
   setBuddy(enabled: boolean): Promise<boolean>;
   setBuddyStartup(enabled: boolean): Promise<boolean>;
   onBuddyDismissed(cb: () => void): () => void;
@@ -129,6 +130,20 @@ export const api = {
       readmeExcerpt: scan.readmeExcerpt,
     };
     if (isDesktop) return window.astax!.aiRefine(payload);
+    return null;
+  },
+
+  /** Ask the configured AI for a revival plan. Returns null when unavailable —
+   *  the caller falls back to the heuristic plan from mystic.ts. */
+  async aiRevive(scan: ScanResult, cfg: AiConfig): Promise<{ stallReason: string; summary: string; steps: string[] } | null> {
+    const daysSinceEdit = scan.lastModified ? Math.round((Date.now() - scan.lastModified) / 86400000) : 9999;
+    const payload = {
+      ...cfg, name: scan.name, tools: scan.tools, hosting: scan.hosting,
+      completion: scan.completion, daysSinceEdit, todos: scan.todos,
+      hasReadme: scan.hasReadme, hasTests: scan.hasTests, hasGit: scan.hasGit,
+      readmeExcerpt: scan.readmeExcerpt,
+    };
+    if (isDesktop) return window.astax!.aiRevive(payload);
     return null;
   },
 

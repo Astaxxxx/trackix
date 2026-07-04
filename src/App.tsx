@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Plus, Search, RefreshCw, Trash2, ShieldCheck, Settings as SettingsIcon, Megaphone } from 'lucide-react';
+import { Plus, Search, RefreshCw, Trash2, ShieldCheck, Settings as SettingsIcon, Megaphone, Eye } from 'lucide-react';
 import type { DB, Project, ScanResult, Status, Settings, AiConfig } from './types';
 import { DEFAULT_SETTINGS } from './types';
 
@@ -18,6 +18,8 @@ import ProjectDetail from './components/ProjectDetail';
 import AddProjectModal from './components/AddProjectModal';
 import SettingsModal from './components/SettingsModal';
 import ShareCard from './components/ShareCard';
+import RevivalModal from './components/RevivalModal';
+import OracleModal from './components/OracleModal';
 import HeroMascot from './components/HeroMascot';
 import { TrackixMark, BgSpiral } from './components/Marks';
 import { Mascot, AstaxLogo } from './components/Assets';
@@ -60,6 +62,8 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [oracleOpen, setOracleOpen] = useState(false);
+  const [revivingId, setRevivingId] = useState<string | null>(null);
 
   const colRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const trashRef = useRef<HTMLDivElement | null>(null);
@@ -72,6 +76,7 @@ export default function App() {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         setOpenId(null); setAdding(false); setSettingsOpen(false); setShareOpen(false);
+        setOracleOpen(false); setRevivingId(null);
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         searchRef.current?.focus();
@@ -224,6 +229,7 @@ export default function App() {
   }
 
   const openProject = projects.find((p) => p.id === openId) || null;
+  const revivingProject = projects.find((p) => p.id === revivingId) || null;
 
   return (
     <>
@@ -259,6 +265,9 @@ export default function App() {
         </div>
         <button className="btn" onClick={refreshAll} disabled={refreshingAll || projects.length === 0} title="Re-scan every tracked project">
           <RefreshCw size={15} className={refreshingAll ? 'spin' : ''} /> Refresh all
+        </button>
+        <button className="btn btn-oracle" onClick={() => setOracleOpen(true)} disabled={projects.length === 0} title="Ask the Oracle which project deserves you today">
+          <Eye size={15} /> Oracle
         </button>
         <button className="btn" onClick={() => setShareOpen(true)} disabled={projects.length === 0} title="Generate a shareable Ship Card of your board">
           <Megaphone size={15} /> Share
@@ -391,6 +400,33 @@ export default function App() {
             onChange={(p) => patch(openProject.id, p)}
             onRefresh={() => refreshOne(openProject.id)}
             onDelete={() => remove(openProject.id)}
+            onRevive={() => setRevivingId(openProject.id)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Revival Ritual */}
+      <AnimatePresence>
+        {revivingProject && (
+          <RevivalModal
+            project={revivingProject}
+            ai={aiConfig(settings)}
+            onClose={() => setRevivingId(null)}
+            onAccept={(plan) => {
+              patch(revivingProject.id, { revival: plan, status: 'unfinished' });
+              setRevivingId(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* The Oracle */}
+      <AnimatePresence>
+        {oracleOpen && (
+          <OracleModal
+            projects={projects}
+            onClose={() => setOracleOpen(false)}
+            onOpenProject={(id) => setOpenId(id)}
           />
         )}
       </AnimatePresence>

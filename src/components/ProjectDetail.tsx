@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, FolderOpen, RefreshCw, Trash2, Sparkles, Calendar, Server, Wrench, CheckCircle2, Globe } from 'lucide-react';
+import { X, FolderOpen, RefreshCw, Trash2, Sparkles, Calendar, Server, Wrench, CheckCircle2, Globe, Flame } from 'lucide-react';
 import type { Project, Status } from '../types';
 import { api } from '../api';
 import { timeAgo, STATUS_LABEL } from '../util';
@@ -11,11 +11,12 @@ interface Props {
   onChange: (patch: Partial<Project>) => void;
   onRefresh: () => Promise<void>;
   onDelete: () => void;
+  onRevive: () => void;
 }
 
 const STATUSES: Status[] = ['unfinished', 'finished', 'dropped'];
 
-export default function ProjectDetail({ project, onClose, onChange, onRefresh, onDelete }: Props) {
+export default function ProjectDetail({ project, onClose, onChange, onRefresh, onDelete, onRevive }: Props) {
   const [refreshing, setRefreshing] = useState(false);
 
   async function doRefresh() {
@@ -23,6 +24,14 @@ export default function ProjectDetail({ project, onClose, onChange, onRefresh, o
     await onRefresh();
     setRefreshing(false);
   }
+
+  function toggleStep(i: number) {
+    if (!project.revival) return;
+    const steps = project.revival.steps.map((s, idx) => (idx === i ? { ...s, done: !s.done } : s));
+    onChange({ revival: { ...project.revival, steps } });
+  }
+
+  const revivalDone = project.revival ? project.revival.steps.filter((s) => s.done).length : 0;
 
   return (
     <div className="overlay" onClick={onClose}>
@@ -53,6 +62,18 @@ export default function ProjectDetail({ project, onClose, onChange, onRefresh, o
           </button>
         </div>
 
+        {/* Revival Ritual — for anything that isn't finished yet */}
+        {project.status !== 'finished' && !project.revival && (
+          <button
+            className="btn"
+            style={{ width: '100%', justifyContent: 'center', marginTop: 10, borderColor: 'var(--red)', color: 'var(--red-deep)' }}
+            onClick={onRevive}
+            title="Generate a concrete path from stalled to shipped"
+          >
+            <Flame size={15} /> {project.status === 'dropped' ? 'Revive this project' : 'Forge a revival path'}
+          </button>
+        )}
+
         {/* AI / heuristic suggestion */}
         <div className="suggestion" style={{ marginTop: 18 }}>
           <Sparkles size={18} style={{ color: 'var(--violet-bright)', flexShrink: 0 }} />
@@ -76,6 +97,30 @@ export default function ProjectDetail({ project, onClose, onChange, onRefresh, o
             </button>
           ))}
         </div>
+
+        {/* revival path checklist */}
+        {project.revival && (
+          <>
+            <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Flame size={13} style={{ color: 'var(--red)' }} /> Revival path · {revivalDone}/{project.revival.steps.length}
+              {project.revival.aiTagged && <span className="ai-chip"><Sparkles size={9} /> AI</span>}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {project.revival.steps.map((s, i) => (
+                <label key={i} className={`revival-check ${s.done ? 'done' : ''}`}>
+                  <input type="checkbox" checked={s.done} onChange={() => toggleStep(i)} />
+                  <span>{s.text}</span>
+                </label>
+              ))}
+            </div>
+            {revivalDone === project.revival.steps.length && (
+              <div className="suggestion" style={{ marginTop: 10 }}>
+                <CheckCircle2 size={18} style={{ color: 'var(--ok)', flexShrink: 0 }} />
+                <span><b>The revival is complete.</b> Mark it Finished and take the win.</span>
+              </div>
+            )}
+          </>
+        )}
 
         {/* info cards — "tools used / where hosted / etc." */}
         <div className="section-title">Project info</div>

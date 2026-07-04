@@ -17,6 +17,21 @@ export interface ScanResult {
   readmeExcerpt: string;
 }
 
+/** One step on a project's Revival Path. */
+export interface RevivalStep {
+  text: string;
+  done: boolean;
+}
+
+/** The plan produced by the Revival Ritual for a stalled/dropped project. */
+export interface RevivalPlan {
+  stallReason: string;   // why the project most likely died
+  summary: string;       // one-line rally cry
+  steps: RevivalStep[];  // concrete path back to shipping
+  generatedAt: number;
+  aiTagged: boolean;     // came from an AI provider vs the built-in heuristic
+}
+
 /** A project the user is tracking. Superset of ScanResult + user fields. */
 export interface Project extends ScanResult {
   id: string;
@@ -26,6 +41,7 @@ export interface Project extends ScanResult {
   addedAt: number;
   pinned?: boolean;
   aiTagged?: boolean; // suggestion came from the local AI, not the heuristic
+  revival?: RevivalPlan; // set once the Revival Ritual has been performed
 }
 
 /** AI settings. Ollama runs fully on-device; the Claude API sends project
