@@ -42,6 +42,9 @@ export interface Project extends ScanResult {
   pinned?: boolean;
   aiTagged?: boolean; // suggestion came from the local AI, not the heuristic
   revival?: RevivalPlan; // set once the Revival Ritual has been performed
+  focusMinutes?: number;  // total real minutes spent in Warp focus sessions
+  focusSessions?: number; // how many focus sessions logged
+  lastFocus?: number;     // timestamp of the most recent focus session
 }
 
 /** AI settings. Ollama runs fully on-device; the Claude API sends project

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, FolderOpen, RefreshCw, Trash2, Sparkles, Calendar, Server, Wrench, CheckCircle2, Globe, Flame } from 'lucide-react';
+import { X, FolderOpen, RefreshCw, Trash2, Sparkles, Calendar, Server, Wrench, CheckCircle2, Globe, Flame, Zap } from 'lucide-react';
 import type { Project, Status } from '../types';
 import { api } from '../api';
 import { timeAgo, STATUS_LABEL } from '../util';
@@ -12,11 +12,17 @@ interface Props {
   onRefresh: () => Promise<void>;
   onDelete: () => void;
   onRevive: () => void;
+  onWarp: () => void;
 }
 
 const STATUSES: Status[] = ['unfinished', 'finished', 'dropped'];
 
-export default function ProjectDetail({ project, onClose, onChange, onRefresh, onDelete, onRevive }: Props) {
+function fmtFocus(min: number) {
+  const h = Math.floor(min / 60), m = min % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+export default function ProjectDetail({ project, onClose, onChange, onRefresh, onDelete, onRevive, onWarp }: Props) {
   const [refreshing, setRefreshing] = useState(false);
 
   async function doRefresh() {
@@ -61,6 +67,26 @@ export default function ProjectDetail({ project, onClose, onChange, onRefresh, o
             <RefreshCw size={15} className={refreshing ? 'spin' : ''} /> Refresh
           </button>
         </div>
+
+        {/* Warp — deep focus session */}
+        <button
+          className="btn"
+          style={{ width: '100%', justifyContent: 'center', marginTop: 10, borderColor: 'var(--red)', color: 'var(--red-deep)' }}
+          onClick={onWarp}
+          title="Start a deep-focus session on this project"
+        >
+          <Zap size={15} /> Warp in — deep focus
+        </button>
+
+        {(project.focusMinutes || 0) > 0 && (
+          <div className="focus-stat">
+            <Zap size={18} style={{ color: 'var(--red)', flexShrink: 0 }} />
+            <div>
+              <div className="v">{fmtFocus(project.focusMinutes || 0)} focused</div>
+              <div className="k">across {project.focusSessions || 0} session{project.focusSessions === 1 ? '' : 's'} · last {timeAgo(project.lastFocus || null)}</div>
+            </div>
+          </div>
+        )}
 
         {/* Revival Ritual — for anything that isn't finished yet */}
         {project.status !== 'finished' && !project.revival && (

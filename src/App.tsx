@@ -21,6 +21,7 @@ import ShareCard from './components/ShareCard';
 import RevivalModal from './components/RevivalModal';
 import OracleModal from './components/OracleModal';
 import CosmosModal from './components/CosmosModal';
+import WarpModal from './components/WarpModal';
 import HeroMascot from './components/HeroMascot';
 import { TrackixMark, BgSpiral } from './components/Marks';
 import { Mascot, AstaxLogo } from './components/Assets';
@@ -66,6 +67,7 @@ export default function App() {
   const [oracleOpen, setOracleOpen] = useState(false);
   const [cosmosOpen, setCosmosOpen] = useState(false);
   const [revivingId, setRevivingId] = useState<string | null>(null);
+  const [warpingId, setWarpingId] = useState<string | null>(null);
 
   const colRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const trashRef = useRef<HTMLDivElement | null>(null);
@@ -78,7 +80,7 @@ export default function App() {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         setOpenId(null); setAdding(false); setSettingsOpen(false); setShareOpen(false);
-        setOracleOpen(false); setRevivingId(null); setCosmosOpen(false);
+        setOracleOpen(false); setRevivingId(null); setCosmosOpen(false); setWarpingId(null);
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         searchRef.current?.focus();
@@ -232,6 +234,19 @@ export default function App() {
 
   const openProject = projects.find((p) => p.id === openId) || null;
   const revivingProject = projects.find((p) => p.id === revivingId) || null;
+  const warpingProject = projects.find((p) => p.id === warpingId) || null;
+
+  function logFocus(id: string, minutes: number) {
+    if (minutes > 0) {
+      const p = projects.find((x) => x.id === id);
+      patch(id, {
+        focusMinutes: (p?.focusMinutes || 0) + minutes,
+        focusSessions: (p?.focusSessions || 0) + 1,
+        lastFocus: Date.now(),
+      });
+    }
+    setWarpingId(null);
+  }
 
   return (
     <>
@@ -406,6 +421,18 @@ export default function App() {
             onRefresh={() => refreshOne(openProject.id)}
             onDelete={() => remove(openProject.id)}
             onRevive={() => setRevivingId(openProject.id)}
+            onWarp={() => setWarpingId(openProject.id)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Warp — deep focus */}
+      <AnimatePresence>
+        {warpingProject && (
+          <WarpModal
+            project={warpingProject}
+            onClose={() => setWarpingId(null)}
+            onComplete={(m) => logFocus(warpingProject.id, m)}
           />
         )}
       </AnimatePresence>
@@ -444,6 +471,7 @@ export default function App() {
             onClose={() => setCosmosOpen(false)}
             onOpenProject={(id) => setOpenId(id)}
             onRevive={(id) => setRevivingId(id)}
+            onWarp={(id) => setWarpingId(id)}
           />
         )}
       </AnimatePresence>
