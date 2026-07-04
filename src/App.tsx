@@ -443,6 +443,7 @@ export default function App() {
             projects={projects}
             onClose={() => setCosmosOpen(false)}
             onOpenProject={(id) => setOpenId(id)}
+            onRevive={(id) => setRevivingId(id)}
           />
         )}
       </AnimatePresence>

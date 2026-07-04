@@ -532,6 +532,57 @@ input, textarea, select { font-family: inherit; }
 .ct-sub { font-size: 11.5px; color: rgba(246,239,233,0.6); margin-top: 3px; }
 .ct-hint { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--red-bright); margin-top: 7px; }
 
+/* lenses — filter chips over the sky */
+.cosmos-lenses {
+  position: absolute; top: 76px; left: 28px; display: flex; gap: 8px; flex-wrap: wrap; z-index: 4;
+}
+.lens {
+  font-size: 12px; font-weight: 700; padding: 7px 13px; border-radius: 99px;
+  color: rgba(246,239,233,0.75); background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.14); backdrop-filter: blur(6px);
+  transition: all .18s;
+}
+.lens:hover { border-color: rgba(224,48,30,0.6); color: #fff; }
+.lens.active {
+  background: linear-gradient(135deg, var(--red), var(--red-deep)); color: #fff;
+  border-color: transparent; box-shadow: 0 8px 22px -8px var(--red-glow);
+}
+
+/* star dock — the selected star's control panel */
+.star-dock {
+  position: absolute; top: 76px; right: 28px; z-index: 5; width: 280px;
+  background: rgba(16, 12, 20, 0.9); border: 1px solid rgba(224,48,30,0.35);
+  border-radius: 18px; padding: 18px; backdrop-filter: blur(12px);
+  box-shadow: 0 24px 70px -18px rgba(0,0,0,0.85);
+}
+.sd-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.sd-name { font-size: 18px; font-weight: 900; color: #f6efe9; letter-spacing: -0.01em; word-break: break-word; }
+.sd-close { width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0; }
+.sd-status {
+  display: inline-block; font-size: 10.5px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.07em; padding: 3px 10px; border-radius: 99px; margin-top: 8px;
+}
+.sd-status.unfinished { background: rgba(224,48,30,0.22); color: #ff8a7d; }
+.sd-status.finished { background: rgba(255,190,90,0.18); color: #ffd27a; }
+.sd-status.dropped { background: rgba(120,145,170,0.18); color: #a9bccd; }
+.sd-bar { height: 6px; border-radius: 99px; background: rgba(255,255,255,0.09); overflow: hidden; margin-top: 13px; }
+.sd-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--red-deep), var(--red-bright)); }
+.sd-meta { display: flex; justify-content: space-between; font-size: 11.5px; color: rgba(246,239,233,0.55); margin-top: 7px; }
+.sd-tools { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
+.sd-tools em {
+  font-style: normal; font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 6px;
+  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); color: rgba(246,239,233,0.8);
+}
+.sd-facts { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: rgba(246,239,233,0.5); margin-top: 12px; }
+.sd-actions { display: flex; gap: 7px; margin-top: 15px; }
+.sd-actions .btn { padding: 9px 12px; font-size: 12.5px; }
+.sd-actions .btn-primary { flex: 1; justify-content: center; }
+.sd-ghost {
+  background: rgba(255,255,255,0.06) !important; border-color: rgba(255,255,255,0.16) !important;
+  color: rgba(246,239,233,0.85) !important;
+}
+.sd-ghost:hover { border-color: var(--red) !important; color: #fff !important; }
+
 /* ===== settings toggle ===== */
 .ai-row {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
