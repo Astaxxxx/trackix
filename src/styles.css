@@ -488,6 +488,50 @@ input, textarea, select { font-family: inherit; }
 .omen-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-faint); margin-top: 3px; }
 .oracle-reason { font-size: 12.5px; color: var(--text-dim); margin-top: 14px; line-height: 1.55; }
 
+/* ===== The Cosmos ===== */
+.cosmos-overlay {
+  position: fixed; inset: 0; z-index: 70;
+  background:
+    radial-gradient(1000px 700px at 80% 10%, rgba(60, 16, 30, 0.55), transparent 60%),
+    radial-gradient(800px 600px at 10% 90%, rgba(30, 20, 60, 0.5), transparent 55%),
+    linear-gradient(165deg, #0b0910, #120d16 55%, #0b0a14);
+}
+.cosmos-overlay canvas { position: absolute; inset: 0; }
+.cosmos-head {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 22px 28px; pointer-events: none;
+}
+.cosmos-title {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 19px; font-weight: 900; letter-spacing: 0.02em; color: #f6efe9;
+}
+.cosmos-title svg { color: var(--red-bright); }
+.cosmos-sub { font-size: 12.5px; color: rgba(246, 239, 233, 0.55); margin-top: 4px; }
+.cosmos-close {
+  pointer-events: auto; width: 38px; height: 38px; border-radius: 11px;
+  display: grid; place-items: center; color: rgba(246,239,233,0.8);
+  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14);
+  transition: all .15s;
+}
+.cosmos-close:hover { background: rgba(224,48,30,0.25); border-color: var(--red); color: #fff; transform: rotate(90deg); }
+.cosmos-legend {
+  position: absolute; bottom: 20px; left: 28px; display: flex; gap: 18px; align-items: center;
+  font-size: 11.5px; color: rgba(246,239,233,0.6); pointer-events: none; flex-wrap: wrap;
+}
+.cosmos-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.cosmos-legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.cosmos-legend .dim { color: rgba(246,239,233,0.35); }
+.cosmos-tooltip {
+  position: absolute; pointer-events: none; z-index: 5; width: 210px;
+  background: rgba(16, 12, 20, 0.92); border: 1px solid rgba(224,48,30,0.4);
+  border-radius: 12px; padding: 11px 13px; backdrop-filter: blur(6px);
+  box-shadow: 0 14px 40px -12px rgba(0,0,0,0.8);
+}
+.ct-name { font-size: 14.5px; font-weight: 800; color: #f6efe9; }
+.ct-sub { font-size: 11.5px; color: rgba(246,239,233,0.6); margin-top: 3px; }
+.ct-hint { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--red-bright); margin-top: 7px; }
+
 /* ===== settings toggle ===== */
 .ai-row {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;

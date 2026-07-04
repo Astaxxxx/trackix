@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Plus, Search, RefreshCw, Trash2, ShieldCheck, Settings as SettingsIcon, Megaphone, Eye } from 'lucide-react';
+import { Plus, Search, RefreshCw, Trash2, ShieldCheck, Settings as SettingsIcon, Megaphone, Eye, Orbit } from 'lucide-react';
 import type { DB, Project, ScanResult, Status, Settings, AiConfig } from './types';
 import { DEFAULT_SETTINGS } from './types';
 
@@ -20,6 +20,7 @@ import SettingsModal from './components/SettingsModal';
 import ShareCard from './components/ShareCard';
 import RevivalModal from './components/RevivalModal';
 import OracleModal from './components/OracleModal';
+import CosmosModal from './components/CosmosModal';
 import HeroMascot from './components/HeroMascot';
 import { TrackixMark, BgSpiral } from './components/Marks';
 import { Mascot, AstaxLogo } from './components/Assets';
@@ -63,6 +64,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [oracleOpen, setOracleOpen] = useState(false);
+  const [cosmosOpen, setCosmosOpen] = useState(false);
   const [revivingId, setRevivingId] = useState<string | null>(null);
 
   const colRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -76,7 +78,7 @@ export default function App() {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         setOpenId(null); setAdding(false); setSettingsOpen(false); setShareOpen(false);
-        setOracleOpen(false); setRevivingId(null);
+        setOracleOpen(false); setRevivingId(null); setCosmosOpen(false);
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         searchRef.current?.focus();
@@ -266,6 +268,9 @@ export default function App() {
         <button className="btn" onClick={refreshAll} disabled={refreshingAll || projects.length === 0} title="Re-scan every tracked project">
           <RefreshCw size={15} className={refreshingAll ? 'spin' : ''} /> Refresh all
         </button>
+        <button className="btn btn-oracle" onClick={() => setCosmosOpen(true)} disabled={projects.length === 0} title="See your projects as a living night sky">
+          <Orbit size={15} /> Cosmos
+        </button>
         <button className="btn btn-oracle" onClick={() => setOracleOpen(true)} disabled={projects.length === 0} title="Ask the Oracle which project deserves you today">
           <Eye size={15} /> Oracle
         </button>
@@ -426,6 +431,17 @@ export default function App() {
           <OracleModal
             projects={projects}
             onClose={() => setOracleOpen(false)}
+            onOpenProject={(id) => setOpenId(id)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* The Cosmos */}
+      <AnimatePresence>
+        {cosmosOpen && (
+          <CosmosModal
+            projects={projects}
+            onClose={() => setCosmosOpen(false)}
             onOpenProject={(id) => setOpenId(id)}
           />
         )}
