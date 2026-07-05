@@ -46,6 +46,15 @@ export interface Project extends ScanResult {
   focusSessions?: number; // how many focus sessions logged
   lastFocus?: number;     // timestamp of the most recent focus session
   audit?: Audit;          // latest Deep Scan report
+  lastAutopilot?: AutopilotRun; // summary of the most recent Autopilot pass
+}
+
+/** A record of one Autopilot run, stored on the project. */
+export interface AutopilotRun {
+  at: number;
+  filesChanged: string[];
+  summary: string;
+  humanTasks: string[];
 }
 
 /** AI settings. Ollama runs fully on-device; the Claude API sends project
@@ -103,4 +112,42 @@ export interface DB {
   projects: Project[];
   lastRoot?: string;
   settings?: Settings;
+}
+
+/* ------------------------------ Autopilot ------------------------------ */
+/**
+ * Autopilot finishes an unfinished project by generating the missing code in
+ * the user's own style — reusing patterns from their OTHER tracked projects —
+ * with a git snapshot first and a per-file diff-approval gate before any write.
+ * The agent loop runs in the main process (Claude tool-use); these events stream
+ * to the renderer over IPC so the ArchitectModal can show live progress.
+ */
+export type AutopilotEvent =
+  /** Git safety snapshot result before any write. */
+  | { type: 'snapshot'; mode: 'commit' | 'clean' | 'init' | 'none'; detail: string }
+  /** Which of the user's other projects seeded the "your style" context. */
+  | { type: 'context'; sources: string[] }
+  /** Free-form narration / plan text from the model. */
+  | { type: 'assistant'; text: string }
+  /** The agent read or listed a file/dir (read-only tool). */
+  | { type: 'tool'; tool: 'read_file' | 'list_dir'; path: string }
+  /** A proposed write is awaiting the user's Approve / Skip decision. */
+  | { type: 'diff_request'; id: string; path: string; before: string; after: string; isNew: boolean }
+  | { type: 'file_written'; path: string }
+  | { type: 'file_skipped'; path: string }
+  /** Final report, in Vega's voice. */
+  | { type: 'done'; summary: string; filesChanged: string[]; humanTasks: string[] }
+  | { type: 'stopped' }
+  | { type: 'error'; message: string };
+
+/** What the renderer hands the main process to launch an Autopilot session. */
+export interface AutopilotStart {
+  provider: AiProvider;
+  model: string;
+  apiKey?: string;
+  path: string;   // the target project's folder
+  name: string;   // the target project's name
+  tools: string[]; // the target's primary stack (for portfolio matching)
+  /** The user's OTHER tracked projects — the portfolio we mine for their style. */
+  others: { name: string; path: string; tools: string[] }[];
 }

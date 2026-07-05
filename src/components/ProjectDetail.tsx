@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, FolderOpen, RefreshCw, Trash2, Sparkles, Calendar, Server, Wrench, CheckCircle2, Globe, Flame, Zap, ScanSearch, Loader2 } from 'lucide-react';
+import { X, FolderOpen, RefreshCw, Trash2, Sparkles, Calendar, Server, Wrench, CheckCircle2, Globe, Flame, Zap, ScanSearch, Loader2, Rocket } from 'lucide-react';
 import type { AiConfig, Project, Status } from '../types';
 import { api } from '../api';
 import { timeAgo, STATUS_LABEL } from '../util';
@@ -14,6 +14,7 @@ interface Props {
   onDelete: () => void;
   onRevive: () => void;
   onWarp: () => void;
+  onAutopilot: () => void;
 }
 
 const STATUSES: Status[] = ['unfinished', 'finished', 'dropped'];
@@ -23,7 +24,7 @@ function fmtFocus(min: number) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-export default function ProjectDetail({ project, ai, onClose, onChange, onRefresh, onDelete, onRevive, onWarp }: Props) {
+export default function ProjectDetail({ project, ai, onClose, onChange, onRefresh, onDelete, onRevive, onWarp, onAutopilot }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanErr, setScanErr] = useState<string | null>(null);
@@ -97,6 +98,33 @@ export default function ProjectDetail({ project, ai, onClose, onChange, onRefres
               <div className="v">{fmtFocus(project.focusMinutes || 0)} focused</div>
               <div className="k">across {project.focusSessions || 0} session{project.focusSessions === 1 ? '' : 's'} · last {timeAgo(project.lastFocus || null)}</div>
             </div>
+          </div>
+        )}
+
+        {/* Autopilot — portfolio-aware agentic build (Claude only) */}
+        {ai && ai.provider === 'claude' && !!ai.apiKey && (
+          <button
+            className="btn btn-autopilot"
+            style={{ width: '100%', justifyContent: 'center', marginTop: 10 }}
+            onClick={onAutopilot}
+            title="Let Autopilot finish this project in your own style — every write needs your approval"
+          >
+            <Rocket size={15} /> Autopilot — finish it for me
+          </button>
+        )}
+        {ai && ai.provider === 'ollama' && (
+          <div style={{ fontSize: 11.5, color: 'var(--text-faint)', marginTop: 8, lineHeight: 1.5 }}>
+            <Rocket size={11} style={{ verticalAlign: -1 }} /> Autopilot needs the Claude provider (strong tool-use) — switch in Settings to unlock it.
+          </div>
+        )}
+
+        {project.lastAutopilot && (
+          <div className="suggestion" style={{ marginTop: 10 }}>
+            <Rocket size={18} style={{ color: 'var(--red)', flexShrink: 0 }} />
+            <span>
+              <span className="badge">Autopilot · {timeAgo(project.lastAutopilot.at)}</span><br />
+              {project.lastAutopilot.filesChanged.length} file{project.lastAutopilot.filesChanged.length === 1 ? '' : 's'} changed{project.lastAutopilot.filesChanged.length > 0 && <> — {project.lastAutopilot.filesChanged.slice(0, 3).join(', ')}{project.lastAutopilot.filesChanged.length > 3 ? '…' : ''}</>}
+            </span>
           </div>
         )}
 

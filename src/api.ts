@@ -1,4 +1,4 @@
-import type { DB, ScanResult, AiStatus, Status, AiConfig, ChatMsg, Audit } from './types';
+import type { DB, ScanResult, AiStatus, Status, AiConfig, ChatMsg, Audit, AutopilotEvent, AutopilotStart } from './types';
 
 /**
  * Single data-access layer. In Electron it talks to the secure `window.astax`
@@ -22,6 +22,11 @@ interface AstaxBridge {
   aiRevive(payload: AiPayload): Promise<{ stallReason: string; summary: string; steps: string[] } | null>;
   aiChat(payload: AiConfig & { board: unknown; messages: ChatMsg[] }): Promise<{ text: string; error?: string } | null>;
   aiDeepScan(payload: AiConfig & { path: string; name: string }): Promise<{ audit?: Audit; error?: string } | null>;
+  autopilotStart(payload: AutopilotStart): Promise<{ summary?: string; filesChanged?: string[]; humanTasks?: string[]; stopped?: boolean; error?: string }>;
+  autopilotApprove(id: string): Promise<boolean>;
+  autopilotReject(id: string): Promise<boolean>;
+  autopilotStop(): Promise<boolean>;
+  onAutopilot(cb: (ev: AutopilotEvent) => void): () => void;
   setBuddy(enabled: boolean): Promise<boolean>;
   setBuddyStartup(enabled: boolean): Promise<boolean>;
   onBuddyDismissed(cb: () => void): () => void;
@@ -80,6 +85,47 @@ function mockLoad(): DB | null {
   return raw ? (JSON.parse(raw) as DB) : null;
 }
 function mockSave(db: DB) { localStorage.setItem(MOCK_KEY, JSON.stringify(db)); }
+
+/* ---- Autopilot browser mock (so the ArchitectModal is testable in preview) ---- */
+const mockAutopilotListeners = new Set<(ev: AutopilotEvent) => void>();
+let mockDecide: ((d: 'approve' | 'skip' | 'stop') => void) | null = null;
+function mockEmit(ev: AutopilotEvent) { mockAutopilotListeners.forEach((cb) => cb(ev)); }
+function mockWait(id: string): Promise<'approve' | 'skip' | 'stop'> {
+  return new Promise((resolve) => { mockDecide = (d) => { mockDecide = null; resolve(d); }; void id; });
+}
+function mockAutopilotDecide(d: 'approve' | 'skip' | 'stop') { if (mockDecide) mockDecide(d); return true; }
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function mockAutopilotStart(payload: AutopilotStart) {
+  await sleep(400);
+  mockEmit({ type: 'snapshot', mode: 'commit', detail: 'Committed a snapshot — run `git reset --hard HEAD~1` to undo everything Autopilot writes.' });
+  await sleep(500);
+  mockEmit({ type: 'context', sources: payload.others.slice(0, 2).map((o) => o.name) });
+  await sleep(500);
+  mockEmit({ type: 'assistant', text: `Here's my plan for ${payload.name}:\n1. Wire the API client to the UI\n2. Add the missing error states\n3. Fill in the empty route handler` });
+  await sleep(500);
+  mockEmit({ type: 'tool', tool: 'list_dir', path: 'src' });
+  await sleep(400);
+  mockEmit({ type: 'tool', tool: 'read_file', path: 'src/App.tsx' });
+  await sleep(600);
+  const changed: string[] = [];
+  const files: { path: string; before: string; after: string; isNew: boolean }[] = [
+    { path: 'src/api.ts', before: '', after: 'export async function getData() {\n  const res = await fetch("/api/data");\n  return res.json();\n}\n', isNew: true },
+    { path: 'src/App.tsx', before: 'export default function App() {\n  return <div>TODO</div>;\n}\n', after: 'import { getData } from "./api";\n\nexport default function App() {\n  // wired up in your style\n  return <div className="app">Ready</div>;\n}\n', isNew: false },
+  ];
+  for (const f of files) {
+    const id = 'mock_' + f.path;
+    mockEmit({ type: 'diff_request', id, path: f.path, before: f.before, after: f.after, isNew: f.isNew });
+    const d = await mockWait(id);
+    if (d === 'stop') { mockEmit({ type: 'stopped' }); return { stopped: true }; }
+    if (d === 'approve') { mockEmit({ type: 'file_written', path: f.path }); changed.push(f.path); }
+    else mockEmit({ type: 'file_skipped', path: f.path });
+    await sleep(300);
+  }
+  const humanTasks = ['Add your API keys to the environment', 'Run it locally and click through the flow', 'Deploy when it looks right'];
+  mockEmit({ type: 'done', summary: `Nice — I moved ${payload.name} forward. I wired the API client into your app and filled the stub, matching the patterns from ${payload.others[0]?.name || 'your other work'}. A few human things remain.`, filesChanged: changed, humanTasks });
+  return { summary: 'done', filesChanged: changed, humanTasks };
+}
 
 /* ------------------------------- public API ------------------------------- */
 export const api = {
@@ -159,6 +205,29 @@ export const api = {
   async aiDeepScan(cfg: AiConfig, path: string, name: string): Promise<{ audit?: Audit; error?: string } | null> {
     if (isDesktop) return window.astax!.aiDeepScan({ ...cfg, path, name });
     return { error: 'Deep Scan only runs in the desktop app.' };
+  },
+
+  /* ---- Autopilot ---- */
+  async autopilotStart(payload: AutopilotStart) {
+    if (isDesktop) return window.astax!.autopilotStart(payload);
+    return mockAutopilotStart(payload);
+  },
+  async autopilotApprove(id: string) {
+    if (isDesktop) return window.astax!.autopilotApprove(id);
+    return mockAutopilotDecide('approve');
+  },
+  async autopilotReject(id: string) {
+    if (isDesktop) return window.astax!.autopilotReject(id);
+    return mockAutopilotDecide('skip');
+  },
+  async autopilotStop() {
+    if (isDesktop) return window.astax!.autopilotStop();
+    return mockAutopilotDecide('stop');
+  },
+  onAutopilot(cb: (ev: AutopilotEvent) => void): () => void {
+    if (isDesktop) return window.astax!.onAutopilot(cb);
+    mockAutopilotListeners.add(cb);
+    return () => mockAutopilotListeners.delete(cb);
   },
 
   /* ---- desktop buddy ---- */

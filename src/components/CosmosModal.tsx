@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Orbit, FolderOpen, ArrowRight, Flame, Zap } from 'lucide-react';
+import { X, Orbit, FolderOpen, ArrowRight, Flame, Zap, Rocket } from 'lucide-react';
 import type { Project, Status } from '../types';
 import { daysSince } from '../mystic';
 import { timeAgo, STATUS_LABEL } from '../util';
@@ -21,6 +21,9 @@ interface Props {
   onRevive: (id: string) => void;
   onWarp: (id: string) => void;
   onClose: () => void;
+  /** True when the Claude provider + key are configured — unlocks Autopilot. */
+  canAutopilot: boolean;
+  onAutopilot: (id: string) => void;
 }
 
 type Lens = 'all' | 'unfinished' | 'finished' | 'dropped' | 'stale';
@@ -59,7 +62,7 @@ const LENSES: { key: Lens; label: string }[] = [
   { key: 'stale', label: '⚠ Losing heat' },
 ];
 
-export default function CosmosModal({ projects, onOpenProject, onRevive, onWarp, onClose }: Props) {
+export default function CosmosModal({ projects, onOpenProject, onRevive, onWarp, onClose, canAutopilot, onAutopilot }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -401,6 +404,13 @@ export default function CosmosModal({ projects, onOpenProject, onRevive, onWarp,
                 <button className="btn sd-ghost" onClick={() => { onRevive(selected.id); onClose(); }}><Flame size={14} /> Revive</button>
               )}
             </div>
+            {canAutopilot && selected.status !== 'finished' && (
+              <div className="sd-actions" style={{ marginTop: 7 }}>
+                <button className="btn sd-ghost sd-autopilot" style={{ flex: 1, justifyContent: 'center' }} onClick={() => { onAutopilot(selected.id); onClose(); }}>
+                  <Rocket size={14} /> Autopilot — finish it
+                </button>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

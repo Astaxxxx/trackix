@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Send, Volume2, VolumeX, Sparkles, Loader2 } from 'lucide-react';
+import { X, Send, Volume2, VolumeX, Sparkles, Loader2, Mic, MicOff } from 'lucide-react';
 import type { AiConfig, ChatMsg, Project } from '../types';
 import { api } from '../api';
 import { daysSince } from '../mystic';
+import VegaAvatar, { type VegaState } from './VegaAvatar';
 
 /*
  * VEGA — an AI companion that knows your whole board. Chat with it, and it can
  * speak its replies aloud (browser SpeechSynthesis, offline). Grounded in a
  * compact summary of every project so its advice is about YOUR work.
+ * Its face is a holographic reactive core (three.js) that idles, thinks and
+ * speaks — plus an experimental mic input so you can talk to it.
  */
 
 interface Props {
@@ -24,14 +27,26 @@ const STARTERS = [
   'Give me a plan to ship something this week.',
 ];
 
+/** webkitSpeechRecognition is Chromium-only and may need network — degrade
+ *  gracefully to nothing when unavailable. Typed loosely on purpose. */
+function getRecognition(): any | null {
+  const W = window as any;
+  const Ctor = W.SpeechRecognition || W.webkitSpeechRecognition;
+  if (!Ctor) return null;
+  try { return new Ctor(); } catch { return null; }
+}
+
 export default function VegaModal({ projects, ai, onClose }: Props) {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [voiceOn, setVoiceOn] = useState(false);
+  const [listening, setListening] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const recRef = useRef<any | null>(null);
+  const micAvailable = useMemo(() => getRecognition() !== null, []);
 
   const board = useMemo(() => projects.slice(0, 40).map((p) => ({
     name: p.name, status: p.status, completion: p.completion, tools: p.tools.slice(0, 4),
@@ -44,7 +59,7 @@ export default function VegaModal({ projects, ai, onClose }: Props) {
 
   useEffect(() => { inputRef.current?.focus(); }, []);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages, busy]);
-  useEffect(() => () => window.speechSynthesis?.cancel(), []);
+  useEffect(() => () => { window.speechSynthesis?.cancel(); recRef.current?.abort?.(); }, []);
 
   function speak(text: string) {
     if (!voiceOn || !window.speechSynthesis) return;
@@ -74,6 +89,32 @@ export default function VegaModal({ projects, ai, onClose }: Props) {
     setVoiceOn((v) => !v);
   }
 
+  /** Experimental voice input: transcribe into the chat box. */
+  function toggleMic() {
+    if (listening) { recRef.current?.stop?.(); return; }
+    const rec = getRecognition();
+    if (!rec) return;
+    recRef.current = rec;
+    rec.lang = 'en-GB';
+    rec.interimResults = true;
+    rec.continuous = false;
+    let finalText = '';
+    rec.onresult = (e: any) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalText += t;
+        else interim += t;
+      }
+      setInput((finalText + interim).trim());
+    };
+    rec.onend = () => { setListening(false); recRef.current = null; if (finalText.trim()) inputRef.current?.focus(); };
+    rec.onerror = () => { setListening(false); recRef.current = null; };
+    try { rec.start(); setListening(true); } catch { setListening(false); }
+  }
+
+  const avatarState: VegaState = speaking ? 'speaking' : busy || listening ? 'thinking' : 'idle';
+
   return (
     <div className="modal" onClick={onClose}>
       <motion.div
@@ -83,9 +124,7 @@ export default function VegaModal({ projects, ai, onClose }: Props) {
         transition={{ type: 'spring', stiffness: 320, damping: 28 }}
       >
         <div className="vega-head">
-          <div className={`vega-orb ${busy || speaking ? 'active' : ''}`}>
-            <span className="vo-ring" /><span className="vo-ring r2" /><span className="vo-core" />
-          </div>
+          <VegaAvatar state={avatarState} className="vega-avatar" />
           <div style={{ flex: 1 }}>
             <div className="modal-title" style={{ fontSize: 18 }}>Vega</div>
             <div className="modal-sub" style={{ marginTop: 2 }}>
@@ -110,9 +149,18 @@ export default function VegaModal({ projects, ai, onClose }: Props) {
         </div>
 
         <div className="vega-input">
+          {micAvailable && (
+            <button
+              className={`icon-btn vega-mic ${listening ? 'listening' : ''}`}
+              onClick={toggleMic}
+              title={listening ? 'Stop listening' : 'Talk to Vega (experimental)'}
+            >
+              {listening ? <Mic size={16} /> : <MicOff size={16} />}
+            </button>
+          )}
           <input
             ref={inputRef}
-            placeholder="Ask Vega about your projects…"
+            placeholder={listening ? 'Listening…' : 'Ask Vega about your projects…'}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') send(input); }}

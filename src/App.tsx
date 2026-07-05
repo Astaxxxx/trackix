@@ -23,6 +23,7 @@ import OracleModal from './components/OracleModal';
 import CosmosModal from './components/CosmosModal';
 import WarpModal from './components/WarpModal';
 import VegaModal from './components/VegaModal';
+import ArchitectModal from './components/ArchitectModal';
 import HeroMascot from './components/HeroMascot';
 import { TrackixMark, BgSpiral } from './components/Marks';
 import { Mascot, AstaxLogo } from './components/Assets';
@@ -70,6 +71,7 @@ export default function App() {
   const [revivingId, setRevivingId] = useState<string | null>(null);
   const [warpingId, setWarpingId] = useState<string | null>(null);
   const [vegaOpen, setVegaOpen] = useState(false);
+  const [architectId, setArchitectId] = useState<string | null>(null);
 
   const colRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const trashRef = useRef<HTMLDivElement | null>(null);
@@ -81,6 +83,8 @@ export default function App() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
+        // Autopilot is NOT closed by Escape — an accidental keypress mid-run
+        // would abandon a live session. It closes via its own buttons only.
         setOpenId(null); setAdding(false); setSettingsOpen(false); setShareOpen(false);
         setOracleOpen(false); setRevivingId(null); setCosmosOpen(false); setWarpingId(null); setVegaOpen(false);
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -237,6 +241,17 @@ export default function App() {
   const openProject = projects.find((p) => p.id === openId) || null;
   const revivingProject = projects.find((p) => p.id === revivingId) || null;
   const warpingProject = projects.find((p) => p.id === warpingId) || null;
+  const architectProject = projects.find((p) => p.id === architectId) || null;
+
+  // Autopilot needs Claude (strong tool-use) + a key present.
+  const cfg = aiConfig(settings);
+  const canAutopilot = !!cfg && cfg.provider === 'claude' && !!cfg.apiKey;
+
+  /** Close the Architect and make sure any live session is halted. */
+  function closeArchitect() {
+    api.autopilotStop();
+    setArchitectId(null);
+  }
 
   function logFocus(id: string, minutes: number) {
     if (minutes > 0) {
@@ -428,6 +443,7 @@ export default function App() {
             onDelete={() => remove(openProject.id)}
             onRevive={() => setRevivingId(openProject.id)}
             onWarp={() => setWarpingId(openProject.id)}
+            onAutopilot={() => { setOpenId(null); setArchitectId(openProject.id); }}
           />
         )}
       </AnimatePresence>
@@ -485,6 +501,23 @@ export default function App() {
             onOpenProject={(id) => setOpenId(id)}
             onRevive={(id) => setRevivingId(id)}
             onWarp={(id) => setWarpingId(id)}
+            canAutopilot={canAutopilot}
+            onAutopilot={(id) => setArchitectId(id)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Autopilot — the Architect */}
+      <AnimatePresence>
+        {architectProject && cfg && (
+          <ArchitectModal
+            project={architectProject}
+            ai={cfg}
+            others={projects
+              .filter((p) => p.id !== architectProject.id)
+              .map((p) => ({ name: p.name, path: p.path, tools: p.tools }))}
+            onClose={closeArchitect}
+            onComplete={(run) => patch(architectProject.id, { lastAutopilot: run })}
           />
         )}
       </AnimatePresence>

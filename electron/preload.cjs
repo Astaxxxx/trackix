@@ -29,6 +29,19 @@ contextBridge.exposeInMainWorld('astax', {
   aiChat: (payload) => ipcRenderer.invoke('ai:chat', payload),
   aiDeepScan: (payload) => ipcRenderer.invoke('ai:deepscan', payload),
 
+  // Autopilot — the portfolio-aware agentic build loop (Claude tool-use).
+  // start runs the whole session and resolves when done; approve/reject/stop
+  // drive the per-file diff gate; onAutopilot streams live progress events.
+  autopilotStart: (payload) => ipcRenderer.invoke('autopilot:start', payload),
+  autopilotApprove: (id) => ipcRenderer.invoke('autopilot:approve', id),
+  autopilotReject: (id) => ipcRenderer.invoke('autopilot:reject', id),
+  autopilotStop: () => ipcRenderer.invoke('autopilot:stop'),
+  onAutopilot: (cb) => {
+    const h = (_e, ev) => cb(ev);
+    ipcRenderer.on('autopilot:event', h);
+    return () => ipcRenderer.removeListener('autopilot:event', h);
+  },
+
   // desktop buddy (floating mascot)
   setBuddy: (enabled) => ipcRenderer.invoke('buddy:set', enabled),
   setBuddyStartup: (enabled) => ipcRenderer.invoke('buddy:setStartup', enabled),

@@ -14,6 +14,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, screen } = require('electron');
 const path = require('node:path');
 const fsp = require('node:fs/promises');
+const { execFile } = require('node:child_process');
 const { scanProjects, analyseProject } = require('./scanner.cjs');
 
 const isDev = process.env.ASTAX_DEV === '1';
@@ -555,6 +556,401 @@ ipcMain.handle('ai:deepscan', async (_e, payload) => {
   } catch (e) {
     return { error: (e && e.message) || 'Deep scan failed.' };
   }
+});
+
+/* ---- Autopilot: portfolio-aware agentic code generation ---------------- */
+// The novel feature. Claude finishes an unfinished project by generating the
+// missing code IN THE USER'S OWN STYLE — reusing patterns from their OTHER
+// tracked projects. Every file access is scoped to the target project folder
+// (same resolve+startsWith guard as scanner.cjs), a git snapshot is taken
+// before any write, and every write must be explicitly approved via a diff
+// gate in the renderer. The model never runs code; it reads, plans, and
+// proposes file writes.
+
+const AUTOPILOT_MODEL_FALLBACK = 'claude-opus-4-8';
+const AP_MAX_ITERATIONS = 15;      // agent turns
+const AP_MAX_WRITES = 12;          // files it may create/modify in one pass
+const AP_MAX_FILE_BYTES = 96 * 1024; // reject writes larger than this
+const AP_SKIP = new Set([
+  'node_modules', '.git', 'dist', 'build', 'out', 'release', '.next', '.nuxt',
+  '.expo', '.cache', '.turbo', 'coverage', 'venv', '.venv', '__pycache__',
+  'target', 'bin', 'obj', 'vendor', '.idea', '.vscode',
+]);
+
+/** Resolve `rel` against `root`, rejecting anything that escapes the folder. */
+function scopedPath(root, rel) {
+  const base = path.resolve(root);
+  const full = path.resolve(base, rel || '.');
+  if (full !== base && !full.startsWith(base + path.sep)) return null;
+  return full;
+}
+
+function runGit(cwd, args) {
+  return new Promise((resolve) => {
+    execFile('git', args, { cwd, windowsHide: true, timeout: 20000 }, (err, stdout, stderr) => {
+      resolve({ ok: !err, out: (stdout || '').trim(), err: (stderr || '').trim() });
+    });
+  });
+}
+
+/** Take a revert point before any write. Commits the current tree (or inits a
+ *  repo first). Identity is passed inline so it works on projects with no git
+ *  config, and gpg signing is disabled to avoid interactive prompts. */
+async function autopilotSnapshot(dir) {
+  const inside = await runGit(dir, ['rev-parse', '--is-inside-work-tree']);
+  let mode = 'commit';
+  if (!inside.ok || inside.out !== 'true') {
+    const init = await runGit(dir, ['init']);
+    if (!init.ok) return { mode: 'none', detail: 'Could not create a git snapshot — proceeding with the approval gate as your only safety net.' };
+    mode = 'init';
+  }
+  await runGit(dir, ['add', '-A']);
+  const commit = await runGit(dir, [
+    '-c', 'user.name=Trackix Autopilot', '-c', 'user.email=autopilot@trackix.local',
+    '-c', 'commit.gpgsign=false', 'commit', '-m', 'Trackix Autopilot snapshot',
+  ]);
+  if (!commit.ok) {
+    // Almost always "nothing to commit" — the tree is already a clean revert point.
+    if (/nothing to commit/i.test(commit.out + commit.err)) {
+      return { mode: 'clean', detail: 'Working tree already clean — your last commit is the revert point.' };
+    }
+    return { mode: 'none', detail: 'Git snapshot failed (' + (commit.err || 'unknown') + ') — the approval gate is your safety net.' };
+  }
+  return {
+    mode,
+    detail: mode === 'init'
+      ? 'Initialised a git repo and committed a snapshot — run `git reset --hard HEAD~1` to undo everything.'
+      : 'Committed a snapshot — run `git reset --hard HEAD~1` to undo everything Autopilot writes.',
+  };
+}
+
+/** Pull a handful of short, representative source files from ONE project so the
+ *  model can imitate the user's real style. Filenames matching common concerns
+ *  (auth, upload, api, client, hooks…) are preferred; otherwise the first few
+ *  source files. Scoped + size-capped like every other read in this app. */
+async function gatherStyleSnippets(dir, budget) {
+  const base = path.resolve(dir);
+  const PREF = /(auth|login|upload|api|client|fetch|hook|store|db|model|route|handler|service|util|component)/i;
+  const CODE = /\.(tsx?|jsx?|mjs|cjs|py|go|rs|vue|svelte)$/i;
+  const found = [];
+  async function walk(d, depth) {
+    if (depth > 3 || found.length >= 60) return;
+    let entries;
+    try { entries = await fsp.readdir(d, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (found.length >= 60) return;
+      if (e.name.startsWith('.') || AP_SKIP.has(e.name)) continue;
+      const full = path.join(d, e.name);
+      if (!full.startsWith(base)) continue;
+      if (e.isDirectory()) await walk(full, depth + 1);
+      else if (CODE.test(e.name)) found.push(full);
+    }
+  }
+  await walk(base, 0);
+  found.sort((a, b) => (PREF.test(path.basename(b)) ? 1 : 0) - (PREF.test(path.basename(a)) ? 1 : 0));
+  const parts = [];
+  let left = budget;
+  for (const f of found.slice(0, 4)) {
+    if (left <= 0) break;
+    try {
+      const st = await fsp.stat(f);
+      if (!st.isFile() || st.size > AP_MAX_FILE_BYTES) continue;
+      let txt = await fsp.readFile(f, 'utf8');
+      txt = txt.slice(0, Math.min(1800, left));
+      left -= txt.length;
+      parts.push('--- ' + path.basename(dir) + '/' + path.relative(base, f).replace(/\\/g, '/') + ' ---\n' + txt);
+    } catch { /* ignore */ }
+  }
+  return parts.join('\n\n');
+}
+
+/** Build the "your existing style" context from the user's OTHER projects that
+ *  share a primary tool with the target. Returns { text, sources }. */
+async function gatherPortfolioContext(targetTools, others) {
+  const want = new Set((targetTools || []).map((t) => t.toLowerCase()));
+  const matches = (others || [])
+    .filter((o) => (o.tools || []).some((t) => want.has(t.toLowerCase())))
+    .slice(0, 3);
+  const blocks = [];
+  const sources = [];
+  let budget = 6000;
+  for (const o of matches) {
+    if (budget <= 0) break;
+    const snip = await gatherStyleSnippets(o.path, Math.min(2600, budget));
+    if (snip) { blocks.push(`### From your project "${o.name}" (${(o.tools || []).join(', ')})\n${snip}`); sources.push(o.name); budget -= snip.length; }
+  }
+  return { text: blocks.join('\n\n'), sources };
+}
+
+const AUTOPILOT_SYSTEM = [
+  'You are Autopilot, a senior engineer embedded in Trackix. You FINISH an unfinished coding project for the user by writing the missing code — matching THEIR style, reusing the patterns they already wrote in their OTHER projects (provided below as "your existing style").',
+  'You have three tools, all scoped to the target project folder: read_file, list_dir, write_file.',
+  'Work like this:',
+  '1. Briefly (2-4 sentences) state a concrete plan: the specific files you will create or modify to move this project measurably closer to shipped. Ground it in what you can see.',
+  '2. Use read_file / list_dir to understand the real code before writing. Do not guess file contents.',
+  '3. Make the changes with write_file — one file per call, full file contents. Prefer completing existing stubs and wiring things together over inventing new architecture. Mirror the naming, imports, formatting, and component/style conventions visible in the user\'s existing code.',
+  '4. Keep the scope tight: the smallest set of real, working changes that advances the project. Do not add features, tests, or abstractions that were not needed. Never write secrets or credentials.',
+  'You cannot run, compile, or install anything. When you are done, stop calling tools and write a short final report in Vega\'s warm, encouraging voice: what you built, and the human tasks that remain (deploy, add secrets, test it).',
+  'Every write is shown to the user as a diff they must approve; if they skip a file, respect that and continue with the rest — do not re-propose it.',
+].join('\n');
+
+const AUTOPILOT_TOOLS = [
+  {
+    name: 'read_file',
+    description: 'Read a UTF-8 text file inside the target project. Path is relative to the project root.',
+    input_schema: {
+      type: 'object',
+      properties: { path: { type: 'string', description: 'Project-relative file path, e.g. "src/App.tsx".' } },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'list_dir',
+    description: 'List the entries of a directory inside the target project. Path is relative to the project root ("." for the root).',
+    input_schema: {
+      type: 'object',
+      properties: { path: { type: 'string', description: 'Project-relative directory path.' } },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'write_file',
+    description: 'Propose creating or overwriting a file inside the target project with the given full contents. The user must approve the diff before it is written.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Project-relative file path to write.' },
+        contents: { type: 'string', description: 'The complete new contents of the file.' },
+      },
+      required: ['path', 'contents'],
+    },
+  },
+];
+
+// One session at a time. The approval gate parks a resolver here that the
+// renderer's approve/reject/stop handlers fulfil.
+let autopilot = null; // { dir, aborted, pending: { id, resolve } }
+
+function apSend(event) {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('autopilot:event', event);
+}
+
+function apAwaitDecision(id) {
+  return new Promise((resolve) => { autopilot.pending = { id, resolve }; });
+}
+
+async function apExecReadOnly(dir, name, input) {
+  if (name === 'read_file') {
+    const full = scopedPath(dir, input && input.path);
+    if (!full) return { content: 'Error: path escapes the project folder — refused.', is_error: true };
+    apSend({ type: 'tool', tool: 'read_file', path: String(input.path) });
+    try {
+      const st = await fsp.stat(full);
+      if (!st.isFile()) return { content: 'Error: not a file.', is_error: true };
+      if (st.size > AP_MAX_FILE_BYTES) return { content: 'Error: file too large to read.', is_error: true };
+      const txt = await fsp.readFile(full, 'utf8');
+      return { content: txt.length ? txt : '(empty file)' };
+    } catch {
+      return { content: 'Error: file not found.', is_error: true };
+    }
+  }
+  // list_dir
+  const full = scopedPath(dir, input && input.path);
+  if (!full) return { content: 'Error: path escapes the project folder — refused.', is_error: true };
+  apSend({ type: 'tool', tool: 'list_dir', path: String((input && input.path) || '.') });
+  try {
+    const entries = await fsp.readdir(full, { withFileTypes: true });
+    const listed = entries
+      .filter((e) => !e.name.startsWith('.') && !AP_SKIP.has(e.name))
+      .map((e) => e.name + (e.isDirectory() ? '/' : ''))
+      .slice(0, 100);
+    return { content: listed.length ? listed.join('\n') : '(empty directory)' };
+  } catch {
+    return { content: 'Error: directory not found.', is_error: true };
+  }
+}
+
+/** Handle a write_file tool call: snapshot the before/after, send a diff to the
+ *  renderer, and block on the user's Approve / Skip decision. */
+async function apExecWrite(dir, input, counters) {
+  const rel = input && input.path;
+  const contents = input && input.contents;
+  const full = scopedPath(dir, rel);
+  if (!full) return { content: 'Error: path escapes the project folder — refused.', is_error: true };
+  if (typeof contents !== 'string') return { content: 'Error: missing contents.', is_error: true };
+  if (Buffer.byteLength(contents, 'utf8') > AP_MAX_FILE_BYTES) {
+    return { content: 'Error: file exceeds the size cap — split it into smaller files.', is_error: true };
+  }
+  if (counters.writes >= AP_MAX_WRITES) {
+    return { content: 'Error: reached the per-run file limit. Wrap up and give your final report.', is_error: true };
+  }
+
+  let before = '';
+  let isNew = false;
+  try { before = await fsp.readFile(full, 'utf8'); } catch { isNew = true; }
+  if (!isNew && before === contents) {
+    return { content: 'No change — the file already has these exact contents.' };
+  }
+
+  const id = 'ap_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+  apSend({ type: 'diff_request', id, path: String(rel), before, after: contents, isNew });
+  const decision = await apAwaitDecision(id);
+
+  if (decision === 'stop') return { content: 'The user stopped the session.', is_error: true };
+  if (decision !== 'approve') {
+    apSend({ type: 'file_skipped', path: String(rel) });
+    return { content: 'The user skipped this file. Do not propose it again; continue with the rest.' };
+  }
+  try {
+    await fsp.mkdir(path.dirname(full), { recursive: true });
+    await fsp.writeFile(full, contents, 'utf8');
+    counters.writes += 1;
+    counters.changed.push(String(rel));
+    apSend({ type: 'file_written', path: String(rel) });
+    return { content: 'Written successfully.' };
+  } catch (e) {
+    return { content: 'Error writing file: ' + ((e && e.message) || 'unknown'), is_error: true };
+  }
+}
+
+async function runAutopilot(payload) {
+  const dir = path.resolve(payload.path);
+  autopilot = { dir, aborted: false, pending: null };
+  const counters = { writes: 0, changed: [] };
+
+  // Step 0 — safety snapshot before ANY write.
+  const snap = await autopilotSnapshot(dir);
+  apSend({ type: 'snapshot', mode: snap.mode, detail: snap.detail });
+  if (autopilot.aborted) { apSend({ type: 'stopped' }); return { stopped: true }; }
+
+  // Step 1 — gather context: the target's real files + the user's own style.
+  const target = await gatherProjectContent(dir);
+  const portfolio = await gatherPortfolioContext(payload.tools, payload.others);
+  apSend({ type: 'context', sources: portfolio.sources });
+
+  const client = anthropicClient(payload.apiKey);
+  const model = typeof payload.model === 'string' && payload.model ? payload.model : AUTOPILOT_MODEL_FALLBACK;
+
+  const userIntro =
+    `Target project: "${payload.name}" (stack: ${(payload.tools || []).join(', ') || 'unknown'}).\n\n` +
+    `=== The project's current files ===\n${target || '(nothing readable)'}\n\n` +
+    (portfolio.text
+      ? `=== Your existing style (patterns from your other projects — imitate these) ===\n${portfolio.text}\n\n`
+      : '=== No matching sibling projects were found; infer the style from the target\'s own code. ===\n\n') +
+    'Finish this project. Start with your short plan, then read what you need and propose the file writes.';
+
+  const messages = [{ role: 'user', content: userIntro }];
+
+  let finalText = '';
+  for (let turn = 0; turn < AP_MAX_ITERATIONS; turn++) {
+    if (autopilot.aborted) { apSend({ type: 'stopped' }); return { stopped: true }; }
+
+    let response;
+    try {
+      const stream = client.messages.stream({
+        model,
+        max_tokens: 32000,
+        system: AUTOPILOT_SYSTEM,
+        thinking: { type: 'adaptive' },
+        tools: AUTOPILOT_TOOLS,
+        messages,
+      });
+      response = await stream.finalMessage();
+    } catch (e) {
+      apSend({ type: 'error', message: (e && e.message) || 'The model call failed.' });
+      return { error: (e && e.message) || 'model error' };
+    }
+
+    if (response.stop_reason === 'refusal') {
+      apSend({ type: 'error', message: 'The model declined this request.' });
+      return { error: 'refusal' };
+    }
+
+    // Surface any narration/plan text to the modal.
+    for (const block of response.content) {
+      if (block.type === 'text' && block.text.trim()) {
+        finalText = block.text;
+        apSend({ type: 'assistant', text: block.text });
+      }
+    }
+
+    const toolUses = response.content.filter((b) => b.type === 'tool_use');
+    if (response.stop_reason !== 'tool_use' || toolUses.length === 0) break;
+
+    // Keep the full assistant turn (incl. thinking + tool_use) for replay.
+    messages.push({ role: 'assistant', content: response.content });
+
+    const results = [];
+    for (const tu of toolUses) {
+      if (autopilot.aborted) break;
+      let out;
+      if (tu.name === 'write_file') out = await apExecWrite(dir, tu.input, counters);
+      else if (tu.name === 'read_file' || tu.name === 'list_dir') out = await apExecReadOnly(dir, tu.name, tu.input);
+      else out = { content: 'Unknown tool.', is_error: true };
+      results.push({ type: 'tool_result', tool_use_id: tu.id, content: out.content, ...(out.is_error ? { is_error: true } : {}) });
+    }
+
+    if (autopilot.aborted) { apSend({ type: 'stopped' }); return { stopped: true }; }
+    messages.push({ role: 'user', content: results });
+
+    if (counters.writes >= AP_MAX_WRITES) {
+      messages.push({ role: 'user', content: 'You have reached the file limit for this pass. Stop writing and give your final report now.' });
+    }
+  }
+
+  // Ask for a clean closing report in Vega's voice if the model ended on tools.
+  const humanTasks = extractHumanTasks(finalText);
+  apSend({ type: 'done', summary: finalText || 'Autopilot finished this pass.', filesChanged: counters.changed, humanTasks });
+  return { summary: finalText, filesChanged: counters.changed, humanTasks };
+}
+
+/** Best-effort pull of a "remaining human tasks" list out of the final report. */
+function extractHumanTasks(text) {
+  if (!text) return [];
+  const lines = text.split('\n');
+  const tasks = [];
+  for (const raw of lines) {
+    const m = raw.match(/^\s*(?:[-*•]|\d+[.)])\s+(.*\S)/);
+    if (m) tasks.push(m[1].replace(/\*\*/g, '').slice(0, 160));
+  }
+  return tasks.slice(0, 6);
+}
+
+ipcMain.handle('autopilot:start', async (_e, payload) => {
+  if (!payload || payload.provider !== 'claude' || !payload.apiKey || typeof payload.path !== 'string') {
+    return { error: 'Autopilot needs the Claude provider and an API key.' };
+  }
+  if (autopilot) return { error: 'An Autopilot session is already running.' };
+  try {
+    return await runAutopilot(payload);
+  } catch (e) {
+    apSend({ type: 'error', message: (e && e.message) || 'Autopilot crashed.' });
+    return { error: (e && e.message) || 'crash' };
+  } finally {
+    autopilot = null;
+  }
+});
+
+ipcMain.handle('autopilot:approve', (_e, id) => {
+  if (autopilot && autopilot.pending && autopilot.pending.id === id) {
+    const { resolve } = autopilot.pending; autopilot.pending = null; resolve('approve');
+  }
+  return true;
+});
+
+ipcMain.handle('autopilot:reject', (_e, id) => {
+  if (autopilot && autopilot.pending && autopilot.pending.id === id) {
+    const { resolve } = autopilot.pending; autopilot.pending = null; resolve('skip');
+  }
+  return true;
+});
+
+ipcMain.handle('autopilot:stop', () => {
+  if (autopilot) {
+    autopilot.aborted = true;
+    if (autopilot.pending) { const { resolve } = autopilot.pending; autopilot.pending = null; resolve('stop'); }
+  }
+  return true;
 });
 
 /* ---- IPC ---- */
