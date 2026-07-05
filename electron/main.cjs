@@ -573,7 +573,7 @@ const AP_MAX_WRITES = 10;          // files it may create/modify in one pass
 const AP_MAX_FILE_BYTES = 40 * 1024;   // reject writes larger than this
 const AP_READ_RETURN_CAP = 20 * 1024;  // trim file reads to keep context (and cost) lean
 const AP_MAX_TOKENS = 16000;           // per-turn output cap
-const AP_COST_CAP_USD = 1.25;          // hard spend cap — the loop stops when a pass reaches this
+const AP_COST_CAP_USD = 0.75;          // hard spend cap — the loop stops when a pass reaches this
 const AP_SKIP = new Set([
   'node_modules', '.git', 'dist', 'build', 'out', 'release', '.next', '.nuxt',
   '.expo', '.cache', '.turbo', 'coverage', 'venv', '.venv', '__pycache__',
@@ -722,16 +722,16 @@ async function gatherPortfolioContext(targetTools, others) {
 }
 
 const AUTOPILOT_SYSTEM = [
-  'You are Autopilot, a senior engineer embedded in Trackix. You FINISH an unfinished coding project for the user by writing the missing code — matching THEIR style, reusing the patterns they already wrote in their OTHER projects (provided as "your existing style").',
-  'You have three tools, all scoped to the target project folder: read_file, list_dir, write_file.',
-  'The user pays per token from their own wallet, so be economical and decisive — do not explore more than you need.',
-  'Work like this:',
-  '1. In 2-3 sentences, state a concrete plan: the specific files you will create or modify to move this project measurably closer to shipped. Ground it in what you can already see (a file listing and key files are provided below).',
-  '2. Read at most the 2-3 files you genuinely need before writing. Do not re-read files or list directories you have already seen. Do not guess file contents.',
-  '3. Make the changes with write_file — one file per call, full file contents, kept focused (well under ~500 lines). Prefer completing existing stubs and wiring things together over inventing new architecture. Mirror the naming, imports, formatting, and conventions in the user\'s existing code.',
-  '4. Keep scope tight: the smallest set of real, working changes that advances the project. Do not add features, tests, refactors, or abstractions that were not asked for. Never write secrets or credentials.',
-  'You cannot run, compile, or install anything. When done — usually after 1 to 4 files — STOP calling tools and write a short final report in Vega\'s warm, encouraging voice: what you built, and the human tasks that remain (deploy, add secrets, test it).',
-  'Every write is shown to the user as a diff they must approve; if they skip a file, respect that and continue with the rest — do not re-propose it.',
+  'You are Autopilot, a senior engineer embedded in Trackix. Your job is to ACTUALLY FINISH an unfinished coding project by WRITING CODE — not by describing it. You match the user\'s own style, reusing patterns from their OTHER projects (provided as "your existing style").',
+  'You have three tools, scoped to the target project folder: read_file, list_dir, write_file. The ONLY way to change the project is to CALL write_file. Describing a change in prose does nothing — you must call the tool.',
+  'The user pays per token from their own wallet, so be fast and decisive: minimal reading, then write.',
+  'Do exactly this in one continuous session — never stop to ask permission (the user approves each file via a diff gate):',
+  '1. Give a ONE-LINE plan of which files you will create or edit. Do not write paragraphs of analysis.',
+  '2. Read at most 1-3 files you truly need (a file listing and key files are already provided below). Do not re-read or re-list what you already have.',
+  '3. Immediately CALL write_file for each change — one call per file, the COMPLETE new file contents, focused (well under ~400 lines). Complete existing stubs and wire things together; mirror the naming, imports and formatting in the user\'s code. Do NOT just say what you would write — write it with the tool.',
+  '4. Keep scope tight: the smallest set of real, working changes that moves the project toward shipped. No unrequested features, tests, refactors, or abstractions. Never write secrets or credentials.',
+  'You cannot run, compile, or install anything. ONLY after you have written the files, stop calling tools and give a short final report in Vega\'s warm, encouraging voice: what you built and the human tasks that remain (deploy, add secrets, test it).',
+  'If you catch yourself only analysing, stop and call write_file. Every write is shown as a diff the user approves or skips; if they skip one, continue with the rest and do not re-propose it.',
 ].join('\n');
 
 const AUTOPILOT_TOOLS = [
@@ -889,6 +889,7 @@ async function runAutopilot(payload) {
 
   let finalText = '';
   let capped = false;
+  let nudged = false;
   for (let turn = 0; turn < AP_MAX_ITERATIONS; turn++) {
     if (autopilot.aborted) { apSend({ type: 'stopped' }); return { stopped: true }; }
 
@@ -901,7 +902,7 @@ async function runAutopilot(payload) {
         max_tokens: AP_MAX_TOKENS,
         system,
         thinking: { type: 'adaptive' },
-        output_config: { effort: 'medium' },
+        output_config: { effort: 'low' },
         tools: AUTOPILOT_TOOLS,
         messages,
       });
@@ -933,7 +934,17 @@ async function runAutopilot(payload) {
     }
 
     const toolUses = response.content.filter((b) => b.type === 'tool_use');
-    if (response.stop_reason !== 'tool_use' || toolUses.length === 0) break;
+    if (response.stop_reason !== 'tool_use' || toolUses.length === 0) {
+      // The model stopped without (further) tool calls. If it has written
+      // nothing, it likely only analysed — nudge it ONCE to actually write.
+      if (counters.writes === 0 && !nudged && !autopilot.aborted && costUsd < AP_COST_CAP_USD) {
+        nudged = true;
+        messages.push({ role: 'assistant', content: response.content });
+        messages.push({ role: 'user', content: [{ type: 'text', text: 'You have not created any files yet — analysing is not enough. Call the write_file tool NOW to implement the changes you described: one call per file, the full file contents. Do not reply with prose.' }] });
+        continue;
+      }
+      break;
+    }
 
     // Keep the full assistant turn (incl. thinking + tool_use) for replay.
     messages.push({ role: 'assistant', content: response.content });

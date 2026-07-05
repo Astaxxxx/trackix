@@ -73,6 +73,11 @@ export default function ArchitectModal({ project, ai, others, onClose, onComplet
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
 
+  // Autopilot is token-heavy, so default it to Sonnet 5 — near-Opus quality at
+  // coding for ~40% less. Honour Haiku if the user deliberately picked it.
+  const apModel = /haiku/i.test(ai.model) ? ai.model : 'claude-sonnet-5';
+  const modelLabel = /haiku/i.test(apModel) ? 'Haiku 4.5' : 'Sonnet 5';
+
   const add = (kind: LogKind, text: string) => setLog((l) => [...l, { kind, text }]);
 
   useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' }); }, [log, diff, report]);
@@ -109,7 +114,7 @@ export default function ArchitectModal({ project, ai, others, onClose, onComplet
     if (!started.current) {
       started.current = true;
       api.autopilotStart({
-        provider: 'claude', model: ai.model, apiKey: ai.apiKey,
+        provider: 'claude', model: apModel, apiKey: ai.apiKey,
         path: project.path, name: project.name, tools: project.tools, others,
       });
     }
@@ -169,7 +174,7 @@ export default function ArchitectModal({ project, ai, others, onClose, onComplet
         </div>
 
         <div className="architect-privacy">
-          <ShieldCheck size={12} /> Autopilot sends this project's code and short snippets of your other projects to Anthropic under your own API key.
+          <ShieldCheck size={12} /> Running <b style={{ color: 'rgba(246,239,233,0.7)' }}>{modelLabel}</b> under your own API key — it reads this project + short snippets of your others. Hard-capped at ~$0.75 per run.
         </div>
 
         <div className="architect-log" ref={logRef}>
