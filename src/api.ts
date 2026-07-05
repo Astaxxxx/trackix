@@ -103,10 +103,12 @@ async function mockAutopilotStart(payload: AutopilotStart) {
   mockEmit({ type: 'context', sources: payload.others.slice(0, 2).map((o) => o.name) });
   await sleep(500);
   mockEmit({ type: 'assistant', text: `Here's my plan for ${payload.name}:\n1. Wire the API client to the UI\n2. Add the missing error states\n3. Fill in the empty route handler` });
+  mockEmit({ type: 'usage', inputTokens: 21000, outputTokens: 900, cacheRead: 0, costUsd: 0.13 });
   await sleep(500);
   mockEmit({ type: 'tool', tool: 'list_dir', path: 'src' });
   await sleep(400);
   mockEmit({ type: 'tool', tool: 'read_file', path: 'src/App.tsx' });
+  mockEmit({ type: 'usage', inputTokens: 24000, outputTokens: 2400, cacheRead: 19000, costUsd: 0.21 });
   await sleep(600);
   const changed: string[] = [];
   const files: { path: string; before: string; after: string; isNew: boolean }[] = [
@@ -120,6 +122,7 @@ async function mockAutopilotStart(payload: AutopilotStart) {
     if (d === 'stop') { mockEmit({ type: 'stopped' }); return { stopped: true }; }
     if (d === 'approve') { mockEmit({ type: 'file_written', path: f.path }); changed.push(f.path); }
     else mockEmit({ type: 'file_skipped', path: f.path });
+    mockEmit({ type: 'usage', inputTokens: 26000, outputTokens: 4200 + changed.length * 1500, cacheRead: 40000, costUsd: 0.28 + changed.length * 0.06 });
     await sleep(300);
   }
   const humanTasks = ['Add your API keys to the environment', 'Run it locally and click through the flow', 'Deploy when it looks right'];

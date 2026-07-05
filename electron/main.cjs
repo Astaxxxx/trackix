@@ -568,14 +568,53 @@ ipcMain.handle('ai:deepscan', async (_e, payload) => {
 // proposes file writes.
 
 const AUTOPILOT_MODEL_FALLBACK = 'claude-opus-4-8';
-const AP_MAX_ITERATIONS = 15;      // agent turns
-const AP_MAX_WRITES = 12;          // files it may create/modify in one pass
-const AP_MAX_FILE_BYTES = 96 * 1024; // reject writes larger than this
+const AP_MAX_ITERATIONS = 10;      // agent turns
+const AP_MAX_WRITES = 10;          // files it may create/modify in one pass
+const AP_MAX_FILE_BYTES = 40 * 1024;   // reject writes larger than this
+const AP_READ_RETURN_CAP = 20 * 1024;  // trim file reads to keep context (and cost) lean
+const AP_MAX_TOKENS = 16000;           // per-turn output cap
+const AP_COST_CAP_USD = 1.25;          // hard spend cap — the loop stops when a pass reaches this
 const AP_SKIP = new Set([
   'node_modules', '.git', 'dist', 'build', 'out', 'release', '.next', '.nuxt',
   '.expo', '.cache', '.turbo', 'coverage', 'venv', '.venv', '__pycache__',
   'target', 'bin', 'obj', 'vendor', '.idea', '.vscode',
 ]);
+
+/** Rough per-token USD prices so we can show a live cost meter and enforce a
+ *  spend cap. Cache writes bill ~1.25x input, cache reads ~0.1x input. */
+function apPrices(model) {
+  const m = (model || '').toLowerCase();
+  let inRate = 5e-6, outRate = 25e-6; // opus default
+  if (m.includes('haiku')) { inRate = 1e-6; outRate = 5e-6; }
+  else if (m.includes('sonnet')) { inRate = 3e-6; outRate = 15e-6; }
+  else if (m.includes('fable') || m.includes('mythos')) { inRate = 10e-6; outRate = 50e-6; }
+  return { inRate, outRate };
+}
+function apCostOf(usage, prices) {
+  if (!usage) return 0;
+  const fresh = usage.input_tokens || 0;
+  const out = usage.output_tokens || 0;
+  const cw = usage.cache_creation_input_tokens || 0;
+  const cr = usage.cache_read_input_tokens || 0;
+  return fresh * prices.inRate + out * prices.outRate + cw * prices.inRate * 1.25 + cr * prices.inRate * 0.1;
+}
+
+/** Prompt caching is a prefix match. Cache the (static) system prompt + a
+ *  rolling breakpoint on the newest message so each turn re-reads the growing
+ *  history at ~0.1x instead of full price. Clear old breakpoints first so we
+ *  never exceed the 4-breakpoint limit. */
+function apMarkCache(messages) {
+  for (const msg of messages) {
+    if (Array.isArray(msg.content)) {
+      for (const b of msg.content) { if (b && typeof b === 'object' && b.cache_control) delete b.cache_control; }
+    }
+  }
+  const last = messages[messages.length - 1];
+  if (last && Array.isArray(last.content) && last.content.length) {
+    const block = last.content[last.content.length - 1];
+    if (block && typeof block === 'object') block.cache_control = { type: 'ephemeral' };
+  }
+}
 
 /** Resolve `rel` against `root`, rejecting anything that escapes the folder. */
 function scopedPath(root, rel) {
@@ -683,14 +722,15 @@ async function gatherPortfolioContext(targetTools, others) {
 }
 
 const AUTOPILOT_SYSTEM = [
-  'You are Autopilot, a senior engineer embedded in Trackix. You FINISH an unfinished coding project for the user by writing the missing code — matching THEIR style, reusing the patterns they already wrote in their OTHER projects (provided below as "your existing style").',
+  'You are Autopilot, a senior engineer embedded in Trackix. You FINISH an unfinished coding project for the user by writing the missing code — matching THEIR style, reusing the patterns they already wrote in their OTHER projects (provided as "your existing style").',
   'You have three tools, all scoped to the target project folder: read_file, list_dir, write_file.',
+  'The user pays per token from their own wallet, so be economical and decisive — do not explore more than you need.',
   'Work like this:',
-  '1. Briefly (2-4 sentences) state a concrete plan: the specific files you will create or modify to move this project measurably closer to shipped. Ground it in what you can see.',
-  '2. Use read_file / list_dir to understand the real code before writing. Do not guess file contents.',
-  '3. Make the changes with write_file — one file per call, full file contents. Prefer completing existing stubs and wiring things together over inventing new architecture. Mirror the naming, imports, formatting, and component/style conventions visible in the user\'s existing code.',
-  '4. Keep the scope tight: the smallest set of real, working changes that advances the project. Do not add features, tests, or abstractions that were not needed. Never write secrets or credentials.',
-  'You cannot run, compile, or install anything. When you are done, stop calling tools and write a short final report in Vega\'s warm, encouraging voice: what you built, and the human tasks that remain (deploy, add secrets, test it).',
+  '1. In 2-3 sentences, state a concrete plan: the specific files you will create or modify to move this project measurably closer to shipped. Ground it in what you can already see (a file listing and key files are provided below).',
+  '2. Read at most the 2-3 files you genuinely need before writing. Do not re-read files or list directories you have already seen. Do not guess file contents.',
+  '3. Make the changes with write_file — one file per call, full file contents, kept focused (well under ~500 lines). Prefer completing existing stubs and wiring things together over inventing new architecture. Mirror the naming, imports, formatting, and conventions in the user\'s existing code.',
+  '4. Keep scope tight: the smallest set of real, working changes that advances the project. Do not add features, tests, refactors, or abstractions that were not asked for. Never write secrets or credentials.',
+  'You cannot run, compile, or install anything. When done — usually after 1 to 4 files — STOP calling tools and write a short final report in Vega\'s warm, encouraging voice: what you built, and the human tasks that remain (deploy, add secrets, test it).',
   'Every write is shown to the user as a diff they must approve; if they skip a file, respect that and continue with the rest — do not re-propose it.',
 ].join('\n');
 
@@ -747,8 +787,8 @@ async function apExecReadOnly(dir, name, input) {
     try {
       const st = await fsp.stat(full);
       if (!st.isFile()) return { content: 'Error: not a file.', is_error: true };
-      if (st.size > AP_MAX_FILE_BYTES) return { content: 'Error: file too large to read.', is_error: true };
-      const txt = await fsp.readFile(full, 'utf8');
+      let txt = await fsp.readFile(full, 'utf8');
+      if (txt.length > AP_READ_RETURN_CAP) txt = txt.slice(0, AP_READ_RETURN_CAP) + '\n… (truncated — read a specific region if you need more)';
       return { content: txt.length ? txt : '(empty file)' };
     } catch {
       return { content: 'Error: file not found.', is_error: true };
@@ -837,21 +877,31 @@ async function runAutopilot(payload) {
     (portfolio.text
       ? `=== Your existing style (patterns from your other projects — imitate these) ===\n${portfolio.text}\n\n`
       : '=== No matching sibling projects were found; infer the style from the target\'s own code. ===\n\n') +
-    'Finish this project. Start with your short plan, then read what you need and propose the file writes.';
+    'Finish this project. Start with your short plan, then read only what you need and propose the file writes.';
 
-  const messages = [{ role: 'user', content: userIntro }];
+  // System prompt is static → cache it so it isn't re-billed every turn.
+  const system = [{ type: 'text', text: AUTOPILOT_SYSTEM, cache_control: { type: 'ephemeral' } }];
+  const messages = [{ role: 'user', content: [{ type: 'text', text: userIntro }] }];
+
+  const prices = apPrices(model);
+  let costUsd = 0;
+  let inTok = 0, outTok = 0, cacheReadTok = 0;
 
   let finalText = '';
+  let capped = false;
   for (let turn = 0; turn < AP_MAX_ITERATIONS; turn++) {
     if (autopilot.aborted) { apSend({ type: 'stopped' }); return { stopped: true }; }
+
+    apMarkCache(messages); // rolling cache breakpoint on the newest message
 
     let response;
     try {
       const stream = client.messages.stream({
         model,
-        max_tokens: 32000,
-        system: AUTOPILOT_SYSTEM,
+        max_tokens: AP_MAX_TOKENS,
+        system,
         thinking: { type: 'adaptive' },
+        output_config: { effort: 'medium' },
         tools: AUTOPILOT_TOOLS,
         messages,
       });
@@ -860,6 +910,14 @@ async function runAutopilot(payload) {
       apSend({ type: 'error', message: (e && e.message) || 'The model call failed.' });
       return { error: (e && e.message) || 'model error' };
     }
+
+    // Track real spend and show it live.
+    const u = response.usage || {};
+    costUsd += apCostOf(u, prices);
+    inTok += (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+    outTok += u.output_tokens || 0;
+    cacheReadTok += u.cache_read_input_tokens || 0;
+    apSend({ type: 'usage', inputTokens: inTok, outputTokens: outTok, cacheRead: cacheReadTok, costUsd });
 
     if (response.stop_reason === 'refusal') {
       apSend({ type: 'error', message: 'The model declined this request.' });
@@ -893,9 +951,17 @@ async function runAutopilot(payload) {
     if (autopilot.aborted) { apSend({ type: 'stopped' }); return { stopped: true }; }
     messages.push({ role: 'user', content: results });
 
+    // Hard spend cap — stop a runaway before it drains the wallet.
+    if (costUsd >= AP_COST_CAP_USD) { capped = true; break; }
+
     if (counters.writes >= AP_MAX_WRITES) {
-      messages.push({ role: 'user', content: 'You have reached the file limit for this pass. Stop writing and give your final report now.' });
+      messages.push({ role: 'user', content: [{ type: 'text', text: 'You have reached the file limit for this pass. Stop writing and give your final report now.' }] });
     }
+  }
+
+  if (capped) {
+    apSend({ type: 'stopped', reason: `Reached the ~$${AP_COST_CAP_USD.toFixed(2)} spend cap for one pass. ${counters.changed.length} file${counters.changed.length === 1 ? '' : 's'} written. Run Autopilot again to continue.` });
+    return { stopped: true, filesChanged: counters.changed };
   }
 
   // Ask for a clean closing report in Vega's voice if the model ended on tools.

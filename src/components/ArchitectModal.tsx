@@ -64,6 +64,8 @@ export default function ArchitectModal({ project, ai, others, onClose, onComplet
   const [phase, setPhase] = useState<Phase>('running');
   const [report, setReport] = useState<{ summary: string; humanTasks: string[]; filesChanged: string[] } | null>(null);
   const [errMsg, setErrMsg] = useState('');
+  const [stopReason, setStopReason] = useState('');
+  const [cost, setCost] = useState<{ usd: number; out: number } | null>(null);
   const [voiceOn, setVoiceOn] = useState(true);
   const [speaking, setSpeaking] = useState(false);
   const started = useRef(false);
@@ -92,13 +94,14 @@ export default function ArchitectModal({ project, ai, others, onClose, onComplet
         case 'diff_request': setDiff({ id: ev.id, path: ev.path, before: ev.before, after: ev.after, isNew: ev.isNew }); setPhase('awaiting'); break;
         case 'file_written': add('wrote', `Wrote ${ev.path}`); setDiff(null); setPhase('running'); break;
         case 'file_skipped': add('skipped', `Skipped ${ev.path}`); setDiff(null); setPhase('running'); break;
+        case 'usage': setCost({ usd: ev.costUsd, out: ev.outputTokens }); break;
         case 'done':
           setDiff(null);
           setReport({ summary: ev.summary, humanTasks: ev.humanTasks, filesChanged: ev.filesChanged });
           setPhase('done');
           onCompleteRef.current({ at: Date.now(), filesChanged: ev.filesChanged, summary: ev.summary, humanTasks: ev.humanTasks });
           break;
-        case 'stopped': setDiff(null); setPhase('stopped'); break;
+        case 'stopped': setDiff(null); setStopReason(ev.reason || ''); setPhase('stopped'); break;
         case 'error': setDiff(null); setErrMsg(ev.message); setPhase('error'); break;
       }
     });
@@ -153,6 +156,12 @@ export default function ArchitectModal({ project, ai, others, onClose, onComplet
               {phase === 'error' && 'Something went wrong.'}
             </div>
           </div>
+          {cost && (
+            <div className="arch-cost" title={`${cost.out.toLocaleString()} output tokens so far · your Anthropic key`}>
+              <span className="arch-cost-usd">${cost.usd.toFixed(2)}</span>
+              <span className="arch-cost-lbl">spent</span>
+            </div>
+          )}
           <button className={`icon-btn ${voiceOn ? 'ai-on' : ''}`} onClick={() => { if (voiceOn) window.speechSynthesis?.cancel(); setVoiceOn((v) => !v); }} title={voiceOn ? 'Mute Vega' : 'Let Vega speak'}>
             {voiceOn ? <Volume2 size={16} /> : <VolumeX size={16} />}
           </button>
@@ -221,7 +230,7 @@ export default function ArchitectModal({ project, ai, others, onClose, onComplet
             <div className="arch-error"><AlertTriangle size={15} /> {errMsg || 'Autopilot failed.'}</div>
           )}
           {phase === 'stopped' && (
-            <div className="arch-error stopped"><Square size={14} /> Stopped. Nothing further was written — your snapshot is intact.</div>
+            <div className="arch-error stopped"><Square size={14} /> {stopReason || 'Stopped. Nothing further was written — your snapshot is intact.'}</div>
           )}
         </div>
 

@@ -135,9 +135,11 @@ export type AutopilotEvent =
   | { type: 'diff_request'; id: string; path: string; before: string; after: string; isNew: boolean }
   | { type: 'file_written'; path: string }
   | { type: 'file_skipped'; path: string }
+  /** Live running spend so the user always sees the cost as it happens. */
+  | { type: 'usage'; inputTokens: number; outputTokens: number; cacheRead: number; costUsd: number }
   /** Final report, in Vega's voice. */
   | { type: 'done'; summary: string; filesChanged: string[]; humanTasks: string[] }
-  | { type: 'stopped' }
+  | { type: 'stopped'; reason?: string }
   | { type: 'error'; message: string };
 
 /** What the renderer hands the main process to launch an Autopilot session. */
