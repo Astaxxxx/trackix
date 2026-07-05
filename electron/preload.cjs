@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld('astax', {
   aiStatus: (cfg) => ipcRenderer.invoke('ai:status', cfg),
   aiRefine: (payload) => ipcRenderer.invoke('ai:refine', payload),
   aiRevive: (payload) => ipcRenderer.invoke('ai:revive', payload),
+  aiChat: (payload) => ipcRenderer.invoke('ai:chat', payload),
+  aiDeepScan: (payload) => ipcRenderer.invoke('ai:deepscan', payload),
 
   // desktop buddy (floating mascot)
   setBuddy: (enabled) => ipcRenderer.invoke('buddy:set', enabled),

@@ -45,6 +45,7 @@ export interface Project extends ScanResult {
   focusMinutes?: number;  // total real minutes spent in Warp focus sessions
   focusSessions?: number; // how many focus sessions logged
   lastFocus?: number;     // timestamp of the most recent focus session
+  audit?: Audit;          // latest Deep Scan report
 }
 
 /** AI settings. Ollama runs fully on-device; the Claude API sends project
@@ -76,6 +77,18 @@ export interface AiConfig {
   provider: AiProvider;
   model: string;   // ollama tag or claude model id
   apiKey?: string; // claude only
+}
+
+/** A message in a Vega conversation. */
+export interface ChatMsg { role: 'user' | 'assistant'; content: string; }
+
+/** Deep Scan audit of a project's real files. */
+export interface Audit {
+  summary: string;
+  health: string;
+  risks: string[];
+  nextActions: string[];
+  scannedAt?: number;
 }
 
 export interface AiStatus {

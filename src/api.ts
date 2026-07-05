@@ -1,4 +1,4 @@
-import type { DB, ScanResult, AiStatus, Status, AiConfig } from './types';
+import type { DB, ScanResult, AiStatus, Status, AiConfig, ChatMsg, Audit } from './types';
 
 /**
  * Single data-access layer. In Electron it talks to the secure `window.astax`
@@ -20,6 +20,8 @@ interface AstaxBridge {
   aiStatus(cfg: AiConfig): Promise<AiStatus>;
   aiRefine(payload: AiPayload): Promise<{ status: Status; reason: string } | null>;
   aiRevive(payload: AiPayload): Promise<{ stallReason: string; summary: string; steps: string[] } | null>;
+  aiChat(payload: AiConfig & { board: unknown; messages: ChatMsg[] }): Promise<{ text: string; error?: string } | null>;
+  aiDeepScan(payload: AiConfig & { path: string; name: string }): Promise<{ audit?: Audit; error?: string } | null>;
   setBuddy(enabled: boolean): Promise<boolean>;
   setBuddyStartup(enabled: boolean): Promise<boolean>;
   onBuddyDismissed(cb: () => void): () => void;
@@ -145,6 +147,18 @@ export const api = {
     };
     if (isDesktop) return window.astax!.aiRevive(payload);
     return null;
+  },
+
+  /** Chat with Vega, grounded in a compact summary of the whole board. */
+  async aiChat(cfg: AiConfig, board: unknown, messages: ChatMsg[]): Promise<{ text: string; error?: string } | null> {
+    if (isDesktop) return window.astax!.aiChat({ ...cfg, board, messages });
+    return { text: 'Vega only runs in the desktop app.' };
+  },
+
+  /** Deep-scan a project's real files for an AI audit. */
+  async aiDeepScan(cfg: AiConfig, path: string, name: string): Promise<{ audit?: Audit; error?: string } | null> {
+    if (isDesktop) return window.astax!.aiDeepScan({ ...cfg, path, name });
+    return { error: 'Deep Scan only runs in the desktop app.' };
   },
 
   /* ---- desktop buddy ---- */

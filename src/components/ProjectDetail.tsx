@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, FolderOpen, RefreshCw, Trash2, Sparkles, Calendar, Server, Wrench, CheckCircle2, Globe, Flame, Zap } from 'lucide-react';
-import type { Project, Status } from '../types';
+import { X, FolderOpen, RefreshCw, Trash2, Sparkles, Calendar, Server, Wrench, CheckCircle2, Globe, Flame, Zap, ScanSearch, Loader2 } from 'lucide-react';
+import type { AiConfig, Project, Status } from '../types';
 import { api } from '../api';
 import { timeAgo, STATUS_LABEL } from '../util';
 
 interface Props {
   project: Project;
+  ai: AiConfig | null;
   onClose: () => void;
   onChange: (patch: Partial<Project>) => void;
   onRefresh: () => Promise<void>;
@@ -22,13 +23,24 @@ function fmtFocus(min: number) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-export default function ProjectDetail({ project, onClose, onChange, onRefresh, onDelete, onRevive, onWarp }: Props) {
+export default function ProjectDetail({ project, ai, onClose, onChange, onRefresh, onDelete, onRevive, onWarp }: Props) {
   const [refreshing, setRefreshing] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanErr, setScanErr] = useState<string | null>(null);
 
   async function doRefresh() {
     setRefreshing(true);
     await onRefresh();
     setRefreshing(false);
+  }
+
+  async function deepScan() {
+    if (!ai) return;
+    setScanning(true); setScanErr(null);
+    const out = await api.aiDeepScan(ai, project.path, project.name);
+    setScanning(false);
+    if (out?.audit) onChange({ audit: { ...out.audit, scannedAt: Date.now() } });
+    else setScanErr(out?.error || 'Deep scan failed.');
   }
 
   function toggleStep(i: number) {
@@ -86,6 +98,42 @@ export default function ProjectDetail({ project, onClose, onChange, onRefresh, o
               <div className="k">across {project.focusSessions || 0} session{project.focusSessions === 1 ? '' : 's'} · last {timeAgo(project.lastFocus || null)}</div>
             </div>
           </div>
+        )}
+
+        {/* Deep Scan — AI reads the real files */}
+        {ai && (
+          <button
+            className="btn"
+            style={{ width: '100%', justifyContent: 'center', marginTop: 10 }}
+            onClick={deepScan}
+            disabled={scanning}
+            title="Let the AI read this project's real files and audit it"
+          >
+            {scanning ? <Loader2 size={15} className="spin" /> : <ScanSearch size={15} />}
+            {scanning ? 'Reading the code…' : project.audit ? 'Re-scan with AI' : 'Deep scan with AI'}
+          </button>
+        )}
+        {scanErr && <div style={{ fontSize: 12, color: 'var(--red-deep)', marginTop: 6 }}>{scanErr}</div>}
+
+        {project.audit && (
+          <>
+            <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <ScanSearch size={13} style={{ color: 'var(--red)' }} /> Deep Scan report
+              <span className="ai-chip"><Sparkles size={9} /> AI</span>
+            </div>
+            <div className="audit-box">
+              <div className="audit-summary">{project.audit.summary}</div>
+              {project.audit.health && <div className="audit-health">{project.audit.health}</div>}
+              {project.audit.risks.length > 0 && <>
+                <div className="audit-h">Risks & gaps</div>
+                <ul className="audit-list risk">{project.audit.risks.map((r, i) => <li key={i}>{r}</li>)}</ul>
+              </>}
+              {project.audit.nextActions.length > 0 && <>
+                <div className="audit-h">Top next moves</div>
+                <ul className="audit-list">{project.audit.nextActions.map((a, i) => <li key={i}>{a}</li>)}</ul>
+              </>}
+            </div>
+          </>
         )}
 
         {/* Revival Ritual — for anything that isn't finished yet */}

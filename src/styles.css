@@ -629,6 +629,53 @@ input, textarea, select { font-family: inherit; }
 .focus-stat .v { font-weight: 800; font-size: 14px; color: var(--ink); }
 .focus-stat .k { font-size: 11.5px; color: var(--text-faint); }
 
+/* ===== Vega (AI companion) ===== */
+.vega-card { width: 460px; display: flex; flex-direction: column; max-height: 82vh; }
+.vega-head { display: flex; align-items: center; gap: 12px; }
+.vega-orb { position: relative; width: 44px; height: 44px; display: grid; place-items: center; flex-shrink: 0; }
+.vega-orb .vo-core {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, #ff8a7d, var(--red) 60%, var(--red-deep));
+  box-shadow: 0 0 16px var(--red-glow); z-index: 2;
+}
+.vega-orb .vo-ring, .vega-orb .vo-ring.r2 {
+  position: absolute; border-radius: 50%; border: 1.5px solid rgba(224,48,30,0.45);
+}
+.vega-orb .vo-ring { width: 40px; height: 40px; animation: spin 7s linear infinite; }
+.vega-orb .vo-ring.r2 { width: 30px; height: 30px; border-style: dotted; animation: spin 4s linear infinite reverse; }
+.vega-orb.active .vo-core { animation: vega-talk 0.5s ease-in-out infinite; }
+@keyframes vega-talk { 0%,100% { transform: scale(1); } 50% { transform: scale(1.28); } }
+
+.vega-thread { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 9px; margin-top: 16px; padding: 4px 2px; min-height: 180px; }
+.vega-msg { font-size: 13.5px; line-height: 1.55; padding: 10px 13px; border-radius: 14px; max-width: 85%; white-space: pre-wrap; }
+.vega-msg.vega { background: var(--paper); border: 1px solid var(--line); color: var(--ink-soft); align-self: flex-start; border-bottom-left-radius: 4px; }
+.vega-msg.me { background: linear-gradient(135deg, var(--red), var(--red-deep)); color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+.vega-msg.typing { display: inline-flex; align-items: center; gap: 7px; color: var(--text-faint); font-style: italic; }
+.vega-starters { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 6px; }
+.vega-starters button {
+  font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: 99px;
+  background: var(--paper); border: 1px solid var(--line-strong); color: var(--text-dim); transition: all .15s;
+}
+.vega-starters button:hover { border-color: var(--red); color: var(--red-deep); }
+.vega-input { display: flex; gap: 8px; margin-top: 12px; }
+.vega-input input {
+  flex: 1; background: var(--paper); border: 1px solid var(--line-strong); border-radius: 12px;
+  padding: 11px 13px; font-size: 14px; color: var(--ink); outline: none; transition: border-color .2s, box-shadow .2s;
+}
+.vega-input input:focus { border-color: var(--red); background: #fff; box-shadow: 0 0 0 4px var(--red-soft); }
+.vega-input .btn-primary { padding: 11px 16px; }
+.vega-foot { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-faint); margin-top: 9px; }
+
+/* ===== Deep Scan report (detail drawer) ===== */
+.audit-box { background: var(--paper); border: 1px solid var(--line); border-left: 3px solid var(--red); border-radius: var(--radius-sm); padding: 13px 14px; }
+.audit-summary { font-size: 13.5px; color: var(--ink); line-height: 1.55; }
+.audit-health { font-size: 12.5px; color: var(--ink-soft); margin-top: 8px; font-style: italic; }
+.audit-h { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-faint); margin: 12px 0 5px; }
+.audit-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.audit-list li { font-size: 13px; line-height: 1.45; color: var(--ink-soft); display: flex; gap: 8px; }
+.audit-list li::before { content: '›'; color: var(--red); font-weight: 900; }
+.audit-list.risk li::before { content: '⚠'; font-size: 11px; }
+
 /* ===== settings toggle ===== */
 .ai-row {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;

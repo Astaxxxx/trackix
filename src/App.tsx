@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Plus, Search, RefreshCw, Trash2, ShieldCheck, Settings as SettingsIcon, Megaphone, Eye, Orbit } from 'lucide-react';
+import { Plus, Search, RefreshCw, Trash2, ShieldCheck, Settings as SettingsIcon, Megaphone, Eye, Orbit, Sparkles } from 'lucide-react';
 import type { DB, Project, ScanResult, Status, Settings, AiConfig } from './types';
 import { DEFAULT_SETTINGS } from './types';
 
@@ -22,6 +22,7 @@ import RevivalModal from './components/RevivalModal';
 import OracleModal from './components/OracleModal';
 import CosmosModal from './components/CosmosModal';
 import WarpModal from './components/WarpModal';
+import VegaModal from './components/VegaModal';
 import HeroMascot from './components/HeroMascot';
 import { TrackixMark, BgSpiral } from './components/Marks';
 import { Mascot, AstaxLogo } from './components/Assets';
@@ -68,6 +69,7 @@ export default function App() {
   const [cosmosOpen, setCosmosOpen] = useState(false);
   const [revivingId, setRevivingId] = useState<string | null>(null);
   const [warpingId, setWarpingId] = useState<string | null>(null);
+  const [vegaOpen, setVegaOpen] = useState(false);
 
   const colRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const trashRef = useRef<HTMLDivElement | null>(null);
@@ -80,7 +82,7 @@ export default function App() {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         setOpenId(null); setAdding(false); setSettingsOpen(false); setShareOpen(false);
-        setOracleOpen(false); setRevivingId(null); setCosmosOpen(false); setWarpingId(null);
+        setOracleOpen(false); setRevivingId(null); setCosmosOpen(false); setWarpingId(null); setVegaOpen(false);
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         searchRef.current?.focus();
@@ -283,6 +285,9 @@ export default function App() {
         <button className="btn" onClick={refreshAll} disabled={refreshingAll || projects.length === 0} title="Re-scan every tracked project">
           <RefreshCw size={15} className={refreshingAll ? 'spin' : ''} /> Refresh all
         </button>
+        <button className="btn btn-oracle" onClick={() => setVegaOpen(true)} title="Chat with Vega, your AI companion who knows your board">
+          <Sparkles size={15} /> Vega
+        </button>
         <button className="btn btn-oracle" onClick={() => setCosmosOpen(true)} disabled={projects.length === 0} title="See your projects as a living night sky">
           <Orbit size={15} /> Cosmos
         </button>
@@ -416,6 +421,7 @@ export default function App() {
         {openProject && (
           <ProjectDetail
             project={openProject}
+            ai={aiConfig(settings)}
             onClose={() => setOpenId(null)}
             onChange={(p) => patch(openProject.id, p)}
             onRefresh={() => refreshOne(openProject.id)}
@@ -460,6 +466,13 @@ export default function App() {
             onClose={() => setOracleOpen(false)}
             onOpenProject={(id) => setOpenId(id)}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Vega — AI companion */}
+      <AnimatePresence>
+        {vegaOpen && (
+          <VegaModal projects={projects} ai={aiConfig(settings)} onClose={() => setVegaOpen(false)} />
         )}
       </AnimatePresence>
 

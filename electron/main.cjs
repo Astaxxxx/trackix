@@ -386,6 +386,177 @@ ipcMain.handle('ai:revive', async (_e, payload) => {
   }
 });
 
+/* ---- Vega: the AI companion you chat with about your board ---- */
+const VEGA_SYSTEM = [
+  'You are Vega, the keeper of the user\'s "cosmos" inside Trackix — a local project tracker.',
+  'You are warm, sharp, and encouraging, with a light cosmic flavour (stars, orbits, momentum) — but never cheesy or long-winded.',
+  'You know the user\'s whole project board (given below as JSON). Ground every answer in that real data:',
+  'reference specific project names, their status, completion %, tools, focus time and staleness.',
+  'Be concise and practical — a few sentences, or a short list. When they ask what to do, give a clear recommendation, not a survey.',
+  'You cannot run code or change files; you advise. Never invent projects that are not in the board.',
+].join('\n');
+
+async function claudeChat(payload) {
+  const client = anthropicClient(payload.apiKey);
+  const response = await client.messages.create({
+    model: payload.model,
+    max_tokens: 700,
+    system: VEGA_SYSTEM + '\n\nThe user\'s project board (JSON):\n' + JSON.stringify(payload.board || []),
+    messages: (payload.messages || []).slice(-12),
+  });
+  if (response.stop_reason === 'refusal') return { text: 'I had to hold back on that one — ask me another way?' };
+  const t = response.content.find((b) => b.type === 'text');
+  return { text: t ? t.text : '' };
+}
+
+async function ollamaChat(payload) {
+  const r = await fetch(OLLAMA + '/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: payload.model,
+      messages: [
+        { role: 'system', content: VEGA_SYSTEM + '\n\nThe user\'s project board (JSON):\n' + JSON.stringify(payload.board || []) },
+        ...(payload.messages || []).slice(-12),
+      ],
+      stream: false,
+      options: { temperature: 0.6 },
+    }),
+    signal: AbortSignal.timeout(60000),
+  });
+  if (!r.ok) return null;
+  const j = await r.json();
+  return { text: (j.message && j.message.content) || '' };
+}
+
+ipcMain.handle('ai:chat', async (_e, payload) => {
+  if (!payload || typeof payload.model !== 'string') return null;
+  try {
+    if (payload.provider === 'claude') {
+      if (!payload.apiKey) return null;
+      return await claudeChat(payload);
+    }
+    return await ollamaChat(payload);
+  } catch (e) {
+    return { text: '', error: (e && e.message) || 'Vega could not reach the model.' };
+  }
+});
+
+/* ---- Deep Scan: the AI reads a project's real files and audits it ---- */
+// Reads only README + a few entry/source files inside the chosen project,
+// capped hard. On Claude this sends code excerpts to Anthropic (user's key,
+// their own code) — disclosed in the UI. On Ollama it never leaves the machine.
+const DEEPSCAN_CANDIDATES = [
+  'README.md', 'README.txt', 'readme.md', 'package.json', 'requirements.txt', 'pyproject.toml',
+  'Cargo.toml', 'go.mod', 'src/main.tsx', 'src/main.ts', 'src/index.tsx', 'src/index.ts',
+  'src/App.tsx', 'src/app.py', 'main.py', 'app.py', 'main.go', 'index.js', 'src/index.js', 'main.js',
+];
+
+async function gatherProjectContent(dir) {
+  const resolved = path.resolve(dir);
+  const parts = [];
+  let budget = 15000;
+  // include a shallow file listing for structure
+  try {
+    const top = await fsp.readdir(resolved, { withFileTypes: true });
+    parts.push('FILES: ' + top.filter((e) => !e.name.startsWith('.')).map((e) => e.name + (e.isDirectory() ? '/' : '')).slice(0, 40).join(', '));
+  } catch { /* ignore */ }
+  for (const rel of DEEPSCAN_CANDIDATES) {
+    if (budget <= 0) break;
+    const full = path.join(resolved, rel);
+    if (!full.startsWith(resolved)) continue;
+    try {
+      const st = await fsp.stat(full);
+      if (!st.isFile() || st.size > 200 * 1024) continue;
+      let txt = await fsp.readFile(full, 'utf8');
+      txt = txt.slice(0, Math.min(3200, budget));
+      budget -= txt.length;
+      parts.push('=== ' + rel + ' ===\n' + txt);
+    } catch { /* not present */ }
+  }
+  return parts.join('\n\n');
+}
+
+const DEEPSCAN_SYSTEM = [
+  'You are a senior engineer reviewing a coding project from its real files (listing + excerpts).',
+  'Produce an honest, specific audit:',
+  '- summary: 1-2 sentences on what this project actually is and its apparent maturity.',
+  '- health: one blunt sentence on its overall state (well-structured? messy? abandoned-looking?).',
+  '- risks: 1-4 concrete problems or gaps you can see (missing tests, no error handling, secrets, dead code, no README, etc.). If none are visible, return an empty array.',
+  '- nextActions: exactly the 3 highest-leverage next steps to move it toward shipped.',
+  'Judge only from the provided material; do not invent files you were not shown.',
+].join('\n');
+
+const DEEPSCAN_SCHEMA = {
+  type: 'object',
+  properties: {
+    summary: { type: 'string' },
+    health: { type: 'string' },
+    risks: { type: 'array', items: { type: 'string' } },
+    nextActions: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['summary', 'health', 'risks', 'nextActions'],
+  additionalProperties: false,
+};
+
+function coerceAudit(parsed) {
+  if (!parsed || typeof parsed.summary !== 'string') return null;
+  return {
+    summary: String(parsed.summary).slice(0, 400),
+    health: String(parsed.health || '').slice(0, 300),
+    risks: (Array.isArray(parsed.risks) ? parsed.risks : []).slice(0, 4).map((s) => String(s).slice(0, 200)),
+    nextActions: (Array.isArray(parsed.nextActions) ? parsed.nextActions : []).slice(0, 3).map((s) => String(s).slice(0, 200)),
+  };
+}
+
+async function claudeDeepScan(payload, content) {
+  const client = anthropicClient(payload.apiKey);
+  const response = await client.messages.create({
+    model: payload.model,
+    max_tokens: 1024,
+    system: DEEPSCAN_SYSTEM,
+    output_config: { format: { type: 'json_schema', schema: DEEPSCAN_SCHEMA } },
+    messages: [{ role: 'user', content: `Project "${payload.name}" files:\n\n${content}` }],
+  });
+  if (response.stop_reason === 'refusal') return null;
+  const t = response.content.find((b) => b.type === 'text');
+  return coerceAudit(JSON.parse(t ? t.text : '{}'));
+}
+
+async function ollamaDeepScan(payload, content) {
+  const r = await fetch(OLLAMA + '/api/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: payload.model,
+      prompt: DEEPSCAN_SYSTEM
+        + '\n\nReply with ONLY JSON: {"summary":"...","health":"...","risks":["..."],"nextActions":["...","...","..."]}.'
+        + `\n\nProject "${payload.name}" files:\n\n${content}`,
+      stream: false,
+      format: 'json',
+      options: { temperature: 0.2 },
+    }),
+    signal: AbortSignal.timeout(90000),
+  });
+  if (!r.ok) return null;
+  const j = await r.json();
+  return coerceAudit(JSON.parse((j.response || '').trim()));
+}
+
+ipcMain.handle('ai:deepscan', async (_e, payload) => {
+  if (!payload || typeof payload.model !== 'string' || typeof payload.path !== 'string') return null;
+  try {
+    const content = await gatherProjectContent(payload.path);
+    if (!content || content.length < 20) return { error: 'Nothing readable found in this project folder.' };
+    const audit = payload.provider === 'claude'
+      ? (payload.apiKey ? await claudeDeepScan(payload, content) : null)
+      : await ollamaDeepScan(payload, content);
+    return audit ? { audit } : { error: 'The model did not return a usable report.' };
+  } catch (e) {
+    return { error: (e && e.message) || 'Deep scan failed.' };
+  }
+});
+
 /* ---- IPC ---- */
 ipcMain.handle('ai:status', async (_e, cfg) => {
   if (cfg && cfg.provider === 'claude') {
